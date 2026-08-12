@@ -72,27 +72,25 @@ Append to `RenderingTests`:
 
         self.assertEqual(text.count("<details>"), 3)
         self.assertEqual(text.count("<summary>Show remaining 20</summary>"), 3)
+        self.assertEqual(text.count(afflr.TABLE_HEADER), 6)
+        self.assertEqual(text.count(afflr.TABLE_RULE), 6)
         for number in range(1, 6):
             self.assertIn(f"[#{number}]", text)
-        self.assertIn("[#{6}]".format(6), text)
-        self.assertIn("[#{25}]".format(25), text)
+        self.assertIn("[#6]", text)
+        self.assertIn("[#25]", text)
 ```
 
-Also add a structural assertion that each view contains one visible table before its `<details>` and one remainder table inside it.
-
 - [ ] **Step 2: Run RED**
-
-Run:
 
 ```bash
 python -m unittest tests.test_afflr.RenderingTests -v
 ```
 
-Expected: failure because `render_readme_fragment` does not exist.
+Expected: failure because `render_readme_fragment` and the table constants do not exist.
 
 - [ ] **Step 3: Extract one canonical row renderer**
 
-In `scripts/afflr.py`, add:
+Add to `scripts/afflr.py`:
 
 ```python
 TABLE_HEADER = "| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |"
@@ -121,7 +119,7 @@ def render_table_rows(issues: list[IssueRecord]) -> list[str]:
     return rows
 ```
 
-Refactor `render_markdown()` to use `TABLE_HEADER`, `TABLE_RULE`, and `render_table_rows()` without changing its existing output contract.
+Refactor `render_markdown()` to use these constants and `render_table_rows()` without changing its output bytes for identical views.
 
 - [ ] **Step 4: Implement `render_readme_fragment()`**
 
@@ -175,14 +173,12 @@ def render_readme_fragment(views: dict[str, list[IssueRecord]]) -> str:
 
 - [ ] **Step 5: Run GREEN and regression checks**
 
-Run:
-
 ```bash
 python -m unittest tests.test_afflr.RenderingTests -v
 python -m unittest tests.test_afflr -v
 ```
 
-Expected: all existing rendering tests remain green and new fragment tests pass.
+Expected: all rendering tests and the full suite pass.
 
 - [ ] **Step 6: Commit Task 1**
 
@@ -202,11 +198,11 @@ git commit -m "feat: render compact AFFLR README radar"
 
 **Interfaces:**
 - Produces: `README_START`, `README_END`, `inject_readme_fragment(readme: str, fragment: str) -> str`.
-- Extends CLI with `--readme` and keeps `--output` for the full snapshot.
+- Extends CLI with optional `--readme`; `--output` remains required for the full snapshot.
 
 - [ ] **Step 1: Add failing marker-safety tests**
 
-Append tests:
+Append to `RenderingTests`:
 
 ```python
     def test_inject_readme_fragment_preserves_outside_content(self):
@@ -217,7 +213,7 @@ Append tests:
             "before\n<!-- AFFLR-RADAR:START -->\nnew\n<!-- AFFLR-RADAR:END -->\nafter\n",
         )
 
-    def test_inject_readme_fragment_rejects_missing_duplicate_or_inverted_markers(self):
+    def test_inject_readme_fragment_rejects_invalid_markers(self):
         invalid = [
             "no markers\n",
             "<!-- AFFLR-RADAR:START -->\nonly start\n",
@@ -236,11 +232,11 @@ Append tests:
 python -m unittest tests.test_afflr.RenderingTests -v
 ```
 
-Expected: failure because marker helpers do not exist.
+Expected: marker helper failures.
 
 - [ ] **Step 3: Implement exact marker validation and injection**
 
-Add to `scripts/afflr.py`:
+Add:
 
 ```python
 README_START = "<!-- AFFLR-RADAR:START -->"
@@ -271,22 +267,48 @@ Immediately after the live-status metadata and before `## How it works`, insert:
 <!-- AFFLR-RADAR:END -->
 ```
 
-Keep `Evidence before attribution.` and all hand-written content outside the generated region.
+Keep all hand-written content outside the generated region.
 
-- [ ] **Step 5: Add a failing dual-output CLI preservation test**
+- [ ] **Step 5: Add a failing dual-output preservation test**
 
-Extend `HttpAndCliTests` with a temporary directory containing both a full-output file and README. Patch `collect_live_views` to raise `RadarError` and assert both files remain byte-identical after `main(["--output", ..., "--readme", ...])` fails.
+Append to `HttpAndCliTests`:
 
-- [ ] **Step 6: Extend CLI to render both outputs before replacing either tracked destination**
+```python
+    def test_cli_failure_preserves_watchlist_and_readme(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "radar.md"
+            readme = Path(tmp) / "README.md"
+            output.write_text("last known watchlist\n", encoding="utf-8")
+            readme.write_text(
+                "before\n<!-- AFFLR-RADAR:START -->\nold\n<!-- AFFLR-RADAR:END -->\nafter\n",
+                encoding="utf-8",
+            )
+            before_output = output.read_bytes()
+            before_readme = readme.read_bytes()
 
-Update argument parsing:
+            with patch.object(
+                afflr, "collect_live_views", side_effect=afflr.RadarError("boom")
+            ):
+                with self.assertRaises(afflr.RadarError):
+                    afflr.main([
+                        "--output", str(output),
+                        "--readme", str(readme),
+                    ])
+
+            self.assertEqual(output.read_bytes(), before_output)
+            self.assertEqual(readme.read_bytes(), before_readme)
+```
+
+- [ ] **Step 6: Extend CLI to render and validate both outputs before replacing either destination**
+
+Argument parsing:
 
 ```python
 parser.add_argument("--output", required=True)
 parser.add_argument("--readme")
 ```
 
-After collecting live views once:
+Single collection/render phase:
 
 ```python
 views = collect_live_views()
@@ -294,9 +316,9 @@ rendered_watchlist = render_markdown(views)
 rendered_fragment = render_readme_fragment(views)
 ```
 
-If `--readme` is supplied, read and validate the existing README and build `rendered_readme = inject_readme_fragment(existing, rendered_fragment)` before opening any tracked destination. Write both outputs to adjacent temporary files first; only after both writes succeed, atomically replace the requested destinations.
+If `--readme` is supplied, read it and build `rendered_readme = inject_readme_fragment(existing, rendered_fragment)` before opening either destination. Write requested outputs to adjacent `.tmp` files first. After every collection, validation, rendering, and temp write succeeds, replace the destinations. Rendering/validation failure must occur before any tracked destination is replaced.
 
-- [ ] **Step 7: Run GREEN and full suite**
+- [ ] **Step 7: Run GREEN and compilation checks**
 
 ```bash
 python -m unittest tests.test_afflr -v
@@ -321,30 +343,33 @@ git commit -m "feat: inject AFFLR radar safely into README"
 - Modify: `tests/test_afflr.py`
 
 **Interfaces:**
-- Consumes: `python3 scripts/afflr.py --output /tmp/afflr-candidates.md --readme /tmp/README.md` only after copying current README to `/tmp/README.md`.
-- Produces: no commit when bytes are unchanged; otherwise a normal bot commit containing only `README.md` and/or `watchlist/candidates.md`, pushed normally to `main`.
+- Consumes current `main`, current README marker pair, and `scripts/afflr.py` dual-output CLI.
+- Produces no commit on unchanged bytes; otherwise one normal bot commit containing only generated `README.md` and/or `watchlist/candidates.md`, then a normal push to `main`.
 
 - [ ] **Step 1: Replace the old workflow contract test with Direct-Live assertions**
 
-Update `WorkflowContractTests.test_workflow_contract` to require:
+Use:
 
 ```python
-self.assertIn("cron: '17 * * * *'", text)
-self.assertIn("workflow_dispatch:", text)
-self.assertIn("contents: write", text)
-self.assertNotIn("pull-requests: write", text)
-self.assertNotIn("automation/afflr", text)
-self.assertNotIn("gh pr", text)
-self.assertNotIn("--force-with-lease", text)
-self.assertNotIn("git push --force", text)
-self.assertIn("README.md", text)
-self.assertIn("watchlist/candidates.md", text)
-self.assertIn("git diff --quiet", text)
-self.assertIn("git push origin HEAD:main", text)
-self.assertIn("3d3c42e5aac5ba805825da76410c181273ba90b1", text)
+class WorkflowContractTests(unittest.TestCase):
+    def test_workflow_contract(self):
+        text = Path(".github/workflows/afflr.yml").read_text(encoding="utf-8")
+        self.assertIn("name: AFFLR", text)
+        self.assertIn("cron: '17 * * * *'", text)
+        self.assertIn("workflow_dispatch:", text)
+        self.assertIn("contents: write", text)
+        self.assertNotIn("pull-requests: write", text)
+        self.assertNotIn("automation/afflr", text)
+        self.assertNotIn("gh pr", text)
+        self.assertNotIn("--force-with-lease", text)
+        self.assertNotIn("git push --force", text)
+        self.assertNotIn("cases/AFF-", text)
+        self.assertIn("README.md", text)
+        self.assertIn("watchlist/candidates.md", text)
+        self.assertIn("git diff --quiet", text)
+        self.assertIn("git push origin HEAD:main", text)
+        self.assertIn("3d3c42e5aac5ba805825da76410c181273ba90b1", text)
 ```
-
-Also assert the workflow has no reference to `cases/AFF-`.
 
 - [ ] **Step 2: Run RED**
 
@@ -352,11 +377,11 @@ Also assert the workflow has no reference to `cases/AFF-`.
 python -m unittest tests.test_afflr.WorkflowContractTests -v
 ```
 
-Expected: failure because the workflow still contains the old automation branch and PR logic.
+Expected: failure because old PR/automation-branch behavior is still present.
 
 - [ ] **Step 3: Rewrite `.github/workflows/afflr.yml`**
 
-Target structure:
+Use this complete target structure:
 
 ```yaml
 name: AFFLR — Anthropic Failure Forensics Live Radar
@@ -423,22 +448,29 @@ jobs:
           git push origin HEAD:main
 ```
 
-The parent-SHA check is deliberate: the generated commit must be directly based on the same remote `main` that was checked out. If `main` moved after checkout, fail instead of rebasing/merging generated data over an unrelated concurrent change.
+The parent-SHA check ensures a generated commit is pushed only if remote `main` is still the exact parent it was rendered from. No rebase, merge, or force push is permitted in this workflow.
 
-- [ ] **Step 4: Run GREEN plus YAML parse check**
+- [ ] **Step 4: Run GREEN and static workflow checks**
 
 ```bash
 python -m unittest tests.test_afflr.WorkflowContractTests -v
 python - <<'PY'
 from pathlib import Path
-import yaml
-with Path('.github/workflows/afflr.yml').open(encoding='utf-8') as f:
-    yaml.safe_load(f)
-print('yaml ok')
+text = Path('.github/workflows/afflr.yml').read_text(encoding='utf-8')
+assert text.count("cron: '17 * * * *'") == 1
+assert 'workflow_dispatch:' in text
+assert 'permissions:\n  contents: write' in text
+assert 'pull-requests: write' not in text
+assert 'automation/afflr' not in text
+assert 'gh pr' not in text
+assert '--force-with-lease' not in text
+assert 'git push --force' not in text
+assert 'git push origin HEAD:main' in text
+print('workflow contract ok')
 PY
 ```
 
-If PyYAML is unavailable in the execution environment, use the repository's existing YAML parser/check from the previous AFFLR verification instead; do not add a runtime dependency to the project.
+Expected: both commands pass. No new parser dependency is introduced.
 
 - [ ] **Step 5: Commit Task 3**
 
@@ -456,12 +488,10 @@ git commit -m "feat: update AFFLR radar directly on main"
 - Modify: `watchlist/candidates.md`
 
 **Interfaces:**
-- Consumes: one successful live `collect_live_views()` result.
-- Produces: README Top-5/details region and complete watchlist generated from that same in-memory views object.
+- Consumes one successful live `collect_live_views()` result.
+- Produces README Top-5/details region and complete watchlist generated from that same views object.
 
-- [ ] **Step 1: Render both outputs in one local command**
-
-Run:
+- [ ] **Step 1: Render both outputs from one live collection without touching tracked files**
 
 ```bash
 cp README.md /tmp/AFFLR-README.md
@@ -470,13 +500,12 @@ python3 scripts/afflr.py \
   --readme /tmp/AFFLR-README.md
 ```
 
-Expected: exit 0; no tracked file has changed yet.
+Expected: exit 0.
 
-- [ ] **Step 2: Inspect generated structure before applying**
+- [ ] **Step 2: Validate generated structure**
 
-Run checks equivalent to:
-
-```python
+```bash
+python - <<'PY'
 from pathlib import Path
 readme = Path('/tmp/AFFLR-README.md').read_text(encoding='utf-8')
 watch = Path('/tmp/afflr-candidates.md').read_text(encoding='utf-8')
@@ -487,6 +516,8 @@ assert readme.count('<summary>Show remaining 20</summary>') == 3
 assert '## Most reacted' in watch
 assert '## Most discussed' in watch
 assert '## Recently active' in watch
+print('generated structure ok')
+PY
 ```
 
 - [ ] **Step 3: Apply both generated files together**
@@ -496,18 +527,35 @@ cp /tmp/AFFLR-README.md README.md
 cp /tmp/afflr-candidates.md watchlist/candidates.md
 ```
 
-- [ ] **Step 4: Verify README hand-written content survived unchanged outside the marker region**
+- [ ] **Step 4: Verify hand-written README content survived outside the generated region**
 
-Assert the title, live schedule `:17 UTC`, manual-trigger link, `How it works`, `What AFFLR does not do`, `Evidence before attribution.`, Ko-fi badge, and MIT license are still present.
+```bash
+python - <<'PY'
+from pathlib import Path
+text = Path('README.md').read_text(encoding='utf-8')
+for required in [
+    '# AFFLR — Anthropic Failure Forensics Live Radar',
+    'every hour at **`:17 UTC`**',
+    'GitHub Actions',
+    '## How it works',
+    '## What AFFLR does not do',
+    'Evidence before attribution.',
+    'ko-fi.com/keilerhirsch',
+    'MIT. See [`LICENSE`](LICENSE).',
+]:
+    assert required in text, required
+print('hand-written README content preserved')
+PY
+```
 
-- [ ] **Step 5: Run full test suite and compile check**
+- [ ] **Step 5: Run full test and compile checks**
 
 ```bash
 python -m unittest tests.test_afflr -v
 python -m py_compile scripts/afflr.py tests/test_afflr.py
 ```
 
-Expected: all tests pass.
+Expected: zero failures.
 
 - [ ] **Step 6: Commit Task 4**
 
@@ -521,10 +569,10 @@ git commit -m "chore: seed AFFLR Direct-Live snapshot"
 ### Task 5: Adversarial completion gate
 
 **Files:**
-- Verify all implementation files; do not add new files.
+- Verify only; create no new implementation files.
 
 **Interfaces:**
-- Confirms the branch is safe to integrate.
+- Confirms the branch is safe to present for integration.
 
 - [ ] **Step 1: Run the complete test suite fresh**
 
@@ -542,7 +590,7 @@ python -m py_compile scripts/afflr.py tests/test_afflr.py
 
 Expected: exit 0.
 
-- [ ] **Step 3: Verify scope against `main`**
+- [ ] **Step 3: Verify implementation scope against `main`**
 
 ```bash
 git diff --name-only main...HEAD
@@ -558,28 +606,77 @@ tests/test_afflr.py
 watchlist/candidates.md
 ```
 
-No `cases/`, methodology, design-plan, or unrelated file may appear on the implementation branch.
-
 - [ ] **Step 4: Verify forbidden workflow behavior is absent**
 
-Search `.github/workflows/afflr.yml` and assert absence of:
-
-```text
-pull-requests: write
-automation/afflr
-gh pr
---force-with-lease
-git push --force
-cases/AFF-
+```bash
+python - <<'PY'
+from pathlib import Path
+text = Path('.github/workflows/afflr.yml').read_text(encoding='utf-8')
+for forbidden in [
+    'pull-requests: write',
+    'automation/afflr',
+    'gh pr',
+    '--force-with-lease',
+    'git push --force',
+    'cases/AFF-',
+]:
+    assert forbidden not in text, forbidden
+print('forbidden workflow behavior absent')
+PY
 ```
 
 - [ ] **Step 5: Verify generated README safety properties**
 
-Assert exactly one marker pair, exactly three `<details>` blocks, `Evidence before attribution.`, and that `README.md` contains no `AFF-001`…`AFF-005` legacy case index.
+```bash
+python - <<'PY'
+from pathlib import Path
+text = Path('README.md').read_text(encoding='utf-8')
+assert text.count('<!-- AFFLR-RADAR:START -->') == 1
+assert text.count('<!-- AFFLR-RADAR:END -->') == 1
+assert text.count('<details>') == 3
+assert 'Evidence before attribution.' in text
+for legacy in ['AFF-001', 'AFF-002', 'AFF-003', 'AFF-004', 'AFF-005']:
+    assert legacy not in text, legacy
+print('README safety properties ok')
+PY
+```
 
-- [ ] **Step 6: Verify no-op determinism**
+- [ ] **Step 6: Add and run an idempotence test before final integration**
 
-Using mocked fixed views, render the full watchlist and README fragment twice and assert byte equality. Then inject the same fragment into an already-generated README twice and assert the second output is byte-identical to the first.
+Add to `RenderingTests`:
+
+```python
+    def test_readme_injection_is_idempotent_for_same_fragment(self):
+        issue = afflr.normalize_issue(self.sample_issue())
+        views = {name: [issue] for name in afflr.VIEW_ORDER}
+        fragment = afflr.render_readme_fragment(views)
+        original = (
+            "before\n"
+            f"{afflr.README_START}\n"
+            "old\n"
+            f"{afflr.README_END}\n"
+            "after\n"
+        )
+        once = afflr.inject_readme_fragment(original, fragment)
+        twice = afflr.inject_readme_fragment(once, fragment)
+        self.assertEqual(once, twice)
+```
+
+Run:
+
+```bash
+python -m unittest tests.test_afflr.RenderingTests.test_readme_injection_is_idempotent_for_same_fragment -v
+python -m unittest tests.test_afflr -v
+```
+
+Expected: idempotence test and full suite pass.
+
+Commit this final test with:
+
+```bash
+git add tests/test_afflr.py
+git commit -m "test: verify AFFLR README idempotence"
+```
 
 - [ ] **Step 7: Review commit history**
 
@@ -587,7 +684,7 @@ Using mocked fixed views, render the full watchlist and README fragment twice an
 git log --oneline main..HEAD
 ```
 
-Expected: only Direct-Live implementation commits; no design/spec documents on the implementation branch.
+Expected: only Direct-Live implementation/test commits; no `docs/superpowers/` files on the implementation branch.
 
 - [ ] **Step 8: Stop at integration gate**
 
