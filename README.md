@@ -1,6 +1,6 @@
 # Anthropic Failure Forensics
 
-Evidence-driven forensic case studies of reproducible failures across Anthropic products, Claude models, Claude Code, generated operational code, configuration, routing, hooks, permissions, and developer workflows.
+This repository documents reproducible failures, regressions, unsafe generated code, and broken or misleading behavior in Anthropic's Claude products — especially Claude Code and Claude models — using public issues, measurements, system artifacts, and forensic evidence.
 
 > **Project codename: AAGOCCFS**  
 > **Anthropic AI-Generated Operational Claude Code Failures & Slop**  
