@@ -14,7 +14,121 @@ AFFLR watches the public [`anthropics/claude-code`](https://github.com/anthropic
 The **Top 5** of each view are visible directly below. Positions 6–25 stay one click away in the expandable sections.
 
 <!-- AFFLR-RADAR:START -->
-> Direct-Live is installed. The first successful hourly/manual refresh will render the Top 5 + expandable remainder here.
+> Automated discovery metadata from public `anthropics/claude-code` issues. Popularity is a discovery signal, not evidence.
+
+### 🔥 Most reacted
+
+| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |
+|---:|---|---|---|---:|---:|---|---|---|
+| [#6235](https://github.com/anthropics/claude-code/issues/6235) | Feature Request: Support AGENTS.md. | DylanLIiii | OPEN | 5880 (👍 4545 · 👎 10 · 😄 33 · 🎉 293 · 😕 5 · ❤️ 397 · 🚀 330 · 👀 267) | 347 | 2026-08-08 | 2025-08-21 | area:core, enhancement, memory |
+| [#42796](https://github.com/anthropics/claude-code/issues/42796) | \[MODEL\] Claude Code is unusable for complex engineering tasks with the Feb updates | stellaraccident | CLOSED / COMPLETED | 3286 (👍 2072 · 👎 8 · 😄 149 · 🎉 114 · 😕 59 · ❤️ 436 · 🚀 231 · 👀 217) | 583 | 2026-04-24 | 2026-04-02 | area:model, bug, model |
+| [#45596](https://github.com/anthropics/claude-code/issues/45596) | Bring Back Buddy — A Consolidated Plea from the Community | Hujoepandiselvan | OPEN | 2068 (👍 1167 · 👎 5 · 😄 36 · 🎉 1 · ❤️ 639 · 🚀 68 · 👀 152) | 266 | 2026-08-12 | 2026-04-09 | area:skills, area:tui, duplicate, enhancement |
+| [#17118](https://github.com/anthropics/claude-code/issues/17118) | \[Feature Request\] Support for OpenCode and Max plan | shawnyeager | CLOSED / COMPLETED | 1416 (👍 797 · 👎 8 · 😄 12 · 😕 4 · ❤️ 514 · 🚀 81) | 410 | 2026-02-09 | 2026-01-09 | area:auth, bug, has repro, oncall, platform:linux |
+| [#3382](https://github.com/anthropics/claude-code/issues/3382) | \[BUG\] Claude says "You're absolutely right!" about everything | scottleibrand | CLOSED / COMPLETED | 1375 (👍 873 · 😄 337 · ❤️ 126 · 👀 39) | 179 | 2025-09-20 | 2025-07-12 | area:core, area:model, bug, duplicate |
+
+<details>
+<summary>Show remaining 20</summary>
+
+| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |
+|---:|---|---|---|---:|---:|---|---|---|
+| [#34229](https://github.com/anthropics/claude-code/issues/34229) | \[BUG\] Phone verification | jpiabrantes | OPEN | 892 (👍 821 · 🎉 15 · ❤️ 21 · 🚀 19 · 👀 16) | 742 | 2026-07-19 | 2026-03-14 | invalid |
+| [#3648](https://github.com/anthropics/claude-code/issues/3648) | Terminal Scrolling Uncontrollably During Claude Code Interaction | JacobGoldenArt | CLOSED / COMPLETED | 837 (👍 694 · 👎 3 · 😄 2 · 🎉 4 · 😕 45 · ❤️ 31 · 🚀 16 · 👀 42) | 337 | 2026-02-06 | 2025-07-16 | area:auth, area:ide, area:tui, bug, oncall, platform:macos |
+| [#826](https://github.com/anthropics/claude-code/issues/826) | \[BUG\] Console scrolling top of history when claude add text to the console | ocontant | OPEN / REOPENED | 823 (👍 691 · 😄 15 · 🎉 2 · 😕 15 · ❤️ 7 · 🚀 15 · 👀 78) | 354 | 2026-07-29 | 2025-04-19 | bug, duplicate, oncall, platform:macos |
+| [#18435](https://github.com/anthropics/claude-code/issues/18435) | \[FEATURE\] Add the ability to manage multiple Claude accounts within the Claude Desktop app with easy switching between profiles. | Agentic-Marketer | OPEN | 809 (👍 716 · ❤️ 46 · 🚀 33 · 👀 14) | 164 | 2026-08-10 | 2026-01-15 | area:auth, area:ide, enhancement |
+| [#36151](https://github.com/anthropics/claude-code/issues/36151) | \[FEATURE\] Multi-account switching in Claude Mobile app without shared email | CorneAussems | OPEN | 792 (👍 581 · ❤️ 171 · 🚀 40) | 153 | 2026-08-12 | 2026-03-19 | invalid |
+| [#16157](https://github.com/anthropics/claude-code/issues/16157) | \[BUG\] Instantly hitting usage limits with Max subscription | deqrocks | OPEN | 724 (👍 693 · 👎 2 · 🎉 1 · 😕 3 · 🚀 17 · 👀 8) | 1486 | 2026-08-06 | 2026-01-03 | area:api, area:cost, bug, oncall, platform:macos |
+| [#65697](https://github.com/anthropics/claude-code/issues/65697) | \[FEATURE\] Official Claude Desktop build for Linux (Ubuntu LTS / Debian) | powell-clark | CLOSED / COMPLETED | 654 (👍 497 · 👎 4 · 🎉 28 · ❤️ 65 · 🚀 35 · 👀 25) | 51 | 2026-07-04 | 2026-06-05 | area:desktop, enhancement, platform:linux |
+| [#17432](https://github.com/anthropics/claude-code/issues/17432) | Feature Request: India-Specific Pricing Plans (INR) for Claude &amp; Claude Code | saidev-pbi-fabric | OPEN | 620 (👍 485 · ❤️ 39 · 🚀 81 · 👀 15) | 212 | 2026-08-07 | 2026-01-11 | area:cost, enhancement, external |
+| [#2511](https://github.com/anthropics/claude-code/issues/2511) | Feature request: Connect Claude code to Claude projects  | salimmallick | OPEN | 595 (👍 384 · ❤️ 116 · 🚀 59 · 👀 36) | 49 | 2026-07-29 | 2025-06-24 | area:core, enhancement |
+| [#6686](https://github.com/anthropics/claude-code/issues/6686) | Feature Request: Add support for Agent Client Protocol (ACP) | coygeek | CLOSED / NOT\_PLANNED | 551 (👍 437 · ❤️ 114) | 37 | 2026-02-19 | 2025-08-27 | area:ide, enhancement, external |
+| [#38335](https://github.com/anthropics/claude-code/issues/38335) | \[BUG\] Claude Max plan session limits exhausted abnormally fast since March 23, 2026 (CLI usage) | karenrebecag | OPEN | 543 (👍 474 · 😕 42 · 👀 27) | 831 | 2026-07-31 | 2026-03-24 | invalid |
+| [#53262](https://github.com/anthropics/claude-code/issues/53262) | HERMES.md in git commit messages causes requests to route to extra usage billing instead of plan quota | sasha-id | CLOSED / COMPLETED | 532 (👍 213 · 👎 3 · 😄 66 · 😕 230 · 🚀 6 · 👀 14) | 93 | 2026-07-11 | 2026-04-25 | area:cost, bug, has repro, platform:macos |
+| [#15942](https://github.com/anthropics/claude-code/issues/15942) | Add support for Visual Studio 2026 Integration | ovftank | OPEN | 514 (👍 412 · 🎉 25 · ❤️ 27 · 🚀 29 · 👀 21) | 149 | 2026-08-11 | 2026-01-01 | area:ide, enhancement, platform:windows |
+| [#27302](https://github.com/anthropics/claude-code/issues/27302) | \[FEATURE\] Support multiple Connector accounts (same connector, different accounts) in Claude and Claude Code on the web (claude.ai/code) | nathanmargaglio | OPEN | 479 (👍 343 · ❤️ 109 · 🚀 15 · 👀 12) | 226 | 2026-08-05 | 2026-02-21 | enhancement |
+| [#1455](https://github.com/anthropics/claude-code/issues/1455) | Claude Code does not respect the XDG Base Directory specification | jennifgcrl | OPEN | 434 (👍 417 · 👎 1 · 😄 3 · 🎉 4 · ❤️ 6 · 👀 3) | 65 | 2026-08-12 | 2025-05-31 | bug, enhancement, platform:linux |
+| [#73125](https://github.com/anthropics/claude-code/issues/73125) | \[BUG\] AskUserQuestion: "No response after 60s — continued without an answer" | ANogin | CLOSED / COMPLETED | 414 (👍 388 · 😄 1 · 😕 16 · 🚀 9) | 143 | 2026-07-09 | 2026-07-02 | api:bedrock, area:tools, area:tui, bug, platform:linux, platform:vscode |
+| [#31005](https://github.com/anthropics/claude-code/issues/31005) | Support for AGENTS.md and .agents/skills/, the community has been asking since August 2025 | kvnwolf | OPEN | 407 (👍 306 · 🎉 2 · ❤️ 69 · 👀 30) | 19 | 2026-08-10 | 2026-03-05 | area:core, duplicate, enhancement, memory |
+| [#6915](https://github.com/anthropics/claude-code/issues/6915) | Allow MCP tools to be available only to subagent | eli0shin | CLOSED / COMPLETED | 378 (👍 271 · ❤️ 57 · 🚀 40 · 👀 10) | 89 | 2026-03-23 | 2025-08-31 | area:mcp, duplicate, enhancement |
+| [#8477](https://github.com/anthropics/claude-code/issues/8477) | \[FEATURE\] Add Option to Always Show Claude's Thinking | janbam | OPEN | 356 (👍 329 · 👎 1 · 👀 26) | 92 | 2026-07-26 | 2025-09-30 | area:tui, enhancement |
+| [#46829](https://github.com/anthropics/claude-code/issues/46829) | Cache TTL silently regressed from 1h to 5m around early March 2026, causing quota and cost inflation | seanGSISG | CLOSED / NOT\_PLANNED | 342 (👍 245 · 😕 24 · ❤️ 24 · 👀 49) | 56 | 2026-06-28 | 2026-04-12 | api:anthropic, area:cost, bug, has repro |
+
+</details>
+
+### 💬 Most discussed
+
+| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |
+|---:|---|---|---|---:|---:|---|---|---|
+| [#16157](https://github.com/anthropics/claude-code/issues/16157) | \[BUG\] Instantly hitting usage limits with Max subscription | deqrocks | OPEN | 724 (👍 693 · 👎 2 · 🎉 1 · 😕 3 · 🚀 17 · 👀 8) | 1486 | 2026-08-06 | 2026-01-03 | area:api, area:cost, bug, oncall, platform:macos |
+| [#38335](https://github.com/anthropics/claude-code/issues/38335) | \[BUG\] Claude Max plan session limits exhausted abnormally fast since March 23, 2026 (CLI usage) | karenrebecag | OPEN | 543 (👍 474 · 😕 42 · 👀 27) | 831 | 2026-07-31 | 2026-03-24 | invalid |
+| [#34229](https://github.com/anthropics/claude-code/issues/34229) | \[BUG\] Phone verification | jpiabrantes | OPEN | 892 (👍 821 · 🎉 15 · ❤️ 21 · 🚀 19 · 👀 16) | 742 | 2026-07-19 | 2026-03-14 | invalid |
+| [#42796](https://github.com/anthropics/claude-code/issues/42796) | \[MODEL\] Claude Code is unusable for complex engineering tasks with the Feb updates | stellaraccident | CLOSED / COMPLETED | 3286 (👍 2072 · 👎 8 · 😄 149 · 🎉 114 · 😕 59 · ❤️ 436 · 🚀 231 · 👀 217) | 583 | 2026-04-24 | 2026-04-02 | area:model, bug, model |
+| [#17118](https://github.com/anthropics/claude-code/issues/17118) | \[Feature Request\] Support for OpenCode and Max plan | shawnyeager | CLOSED / COMPLETED | 1416 (👍 797 · 👎 8 · 😄 12 · 😕 4 · ❤️ 514 · 🚀 81) | 410 | 2026-02-09 | 2026-01-09 | area:auth, bug, has repro, oncall, platform:linux |
+
+<details>
+<summary>Show remaining 20</summary>
+
+| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |
+|---:|---|---|---|---:|---:|---|---|---|
+| [#826](https://github.com/anthropics/claude-code/issues/826) | \[BUG\] Console scrolling top of history when claude add text to the console | ocontant | OPEN / REOPENED | 823 (👍 691 · 😄 15 · 🎉 2 · 😕 15 · ❤️ 7 · 🚀 15 · 👀 78) | 354 | 2026-07-29 | 2025-04-19 | bug, duplicate, oncall, platform:macos |
+| [#6235](https://github.com/anthropics/claude-code/issues/6235) | Feature Request: Support AGENTS.md. | DylanLIiii | OPEN | 5880 (👍 4545 · 👎 10 · 😄 33 · 🎉 293 · 😕 5 · ❤️ 397 · 🚀 330 · 👀 267) | 347 | 2026-08-08 | 2025-08-21 | area:core, enhancement, memory |
+| [#3648](https://github.com/anthropics/claude-code/issues/3648) | Terminal Scrolling Uncontrollably During Claude Code Interaction | JacobGoldenArt | CLOSED / COMPLETED | 837 (👍 694 · 👎 3 · 😄 2 · 🎉 4 · 😕 45 · ❤️ 31 · 🚀 16 · 👀 42) | 337 | 2026-02-06 | 2025-07-16 | area:auth, area:ide, area:tui, bug, oncall, platform:macos |
+| [#769](https://github.com/anthropics/claude-code/issues/769) | \[BUG\]  In-progress Call causes Screen Flickering | Cheffromspace | OPEN / REOPENED | 335 (👍 300 · 😄 3 · 😕 13 · 👀 19) | 307 | 2026-07-16 | 2025-04-12 | area:tools, area:tui, bug, oncall |
+| [#3572](https://github.com/anthropics/claude-code/issues/3572) | Anthropic API Overloaded Error with Repeated 529 Status Codes | wepajoli | CLOSED / COMPLETED | 142 (👍 124 · 😕 10 · 👀 8) | 274 | 2025-08-02 | 2025-07-15 | area:api, area:auth, area:packaging, bug, has repro, platform:macos |
+| [#8763](https://github.com/anthropics/claude-code/issues/8763) | API Error: 400 due to tool use concurrency issues. Run /rewind to recover the conversation. - \[Bug\] Anthropic API Error: Unexpected 400 Bad Request Response | ariccio | CLOSED / COMPLETED | 277 (👍 238 · 😕 36 · 👀 3) | 270 | 2025-11-27 | 2025-10-02 | area:api, area:core, area:tools, bug, has repro, oncall, platform:macos |
+| [#45596](https://github.com/anthropics/claude-code/issues/45596) | Bring Back Buddy — A Consolidated Plea from the Community | Hujoepandiselvan | OPEN | 2068 (👍 1167 · 👎 5 · 😄 36 · 🎉 1 · ❤️ 639 · 🚀 68 · 👀 152) | 266 | 2026-08-12 | 2026-04-09 | area:skills, area:tui, duplicate, enhancement |
+| [#27302](https://github.com/anthropics/claude-code/issues/27302) | \[FEATURE\] Support multiple Connector accounts (same connector, different accounts) in Claude and Claude Code on the web (claude.ai/code) | nathanmargaglio | OPEN | 479 (👍 343 · ❤️ 109 · 🚀 15 · 👀 12) | 226 | 2026-08-05 | 2026-02-21 | enhancement |
+| [#17432](https://github.com/anthropics/claude-code/issues/17432) | Feature Request: India-Specific Pricing Plans (INR) for Claude &amp; Claude Code | saidev-pbi-fabric | OPEN | 620 (👍 485 · ❤️ 39 · 🚀 81 · 👀 15) | 212 | 2026-08-07 | 2026-01-11 | area:cost, enhancement, external |
+| [#1913](https://github.com/anthropics/claude-code/issues/1913) | Terminal Flickering | PierrunoYT | OPEN | 321 (👍 321) | 187 | 2026-07-09 | 2025-06-10 | area:tui, bug, duplicate, oncall |
+| [#4928](https://github.com/anthropics/claude-code/issues/4928) | \[BUG\] file named nul created on windows | rweijnen | CLOSED / COMPLETED | 235 (👍 235) | 184 | 2026-03-23 | 2025-08-01 | area:tools, bug, has repro, oncall, platform:windows |
+| [#46987](https://github.com/anthropics/claude-code/issues/46987) | \[BUG\]  API Error: Stream idle timeout - partial response received - multiple time today | ac-monty | OPEN | 197 (👍 168 · 😕 20 · 👀 9) | 184 | 2026-07-09 | 2026-04-12 | api:anthropic, duplicate, platform:macos |
+| [#5088](https://github.com/anthropics/claude-code/issues/5088) | Claude Account Disabled After Payment for Claude Code Max 5x Plan | thinhbuzz | OPEN | 65 (👍 59 · 👀 6) | 181 | 2026-07-20 | 2025-08-04 | area:auth, area:cost, bug, oncall |
+| [#3382](https://github.com/anthropics/claude-code/issues/3382) | \[BUG\] Claude says "You're absolutely right!" about everything | scottleibrand | CLOSED / COMPLETED | 1375 (👍 873 · 😄 337 · ❤️ 126 · 👀 39) | 179 | 2025-09-20 | 2025-07-12 | area:core, area:model, bug, duplicate |
+| [#18866](https://github.com/anthropics/claude-code/issues/18866) | \[BUG\] Auto-compact not triggering on Claude.ai (web &amp; desktop) despite being marked as fixed | solangerainha | CLOSED / COMPLETED | 65 (👍 65) | 176 | 2026-02-28 | 2026-01-17 | bug, invalid |
+| [#18435](https://github.com/anthropics/claude-code/issues/18435) | \[FEATURE\] Add the ability to manage multiple Claude accounts within the Claude Desktop app with easy switching between profiles. | Agentic-Marketer | OPEN | 809 (👍 716 · ❤️ 46 · 🚀 33 · 👀 14) | 164 | 2026-08-10 | 2026-01-15 | area:auth, area:ide, enhancement |
+| [#24964](https://github.com/anthropics/claude-code/issues/24964) | \[BUG\] Cowork: Folder picker rejects folders outside home directory, symlinks/junctions also blocked | aviy009 | CLOSED / COMPLETED | 190 (👍 189 · 😕 1) | 157 | 2026-04-19 | 2026-02-11 | area:ide, bug, has repro, oncall, platform:macos, platform:windows |
+| [#36151](https://github.com/anthropics/claude-code/issues/36151) | \[FEATURE\] Multi-account switching in Claude Mobile app without shared email | CorneAussems | OPEN | 792 (👍 581 · ❤️ 171 · 🚀 40) | 153 | 2026-08-12 | 2026-03-19 | invalid |
+| [#29579](https://github.com/anthropics/claude-code/issues/29579) | \[BUG\] API Error: Rate limit reached despite Claude Max subscription and only 16% usage | CaptainDaredevil | OPEN | 94 (👍 94) | 153 | 2026-07-27 | 2026-02-28 | area:api, area:auth, bug, has repro, platform:vscode, platform:windows |
+| [#33238](https://github.com/anthropics/claude-code/issues/33238) | Claude Code OAuth login fails with a timeout error. \`auth.anthropic.com\` does not resolve via DNS, making it impossible to authenticate. | lokasquad1 | OPEN | 47 (👍 45 · 👀 2) | 153 | 2026-07-20 | 2026-03-11 | area:auth, bug, platform:windows |
+
+</details>
+
+### 🆕 Recently active
+
+| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |
+|---:|---|---|---|---:|---:|---|---|---|
+| [#86171](https://github.com/anthropics/claude-code/issues/86171) | \[BUG\] Monitor tool not available if DISABLE\_TELEMETRY or CLAUDE\_CODE\_DISABLE\_NONESSENTIAL\_TRAFFIC is set | in-op | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:tools, bug, platform:macos |
+| [#86170](https://github.com/anthropics/claude-code/issues/86170) | System prompt line 'Do not call the AgentTool unless the user requested it' overrides explicit user configuration and is not configurable | alfhellmund | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:agents, enhancement |
+| [#86169](https://github.com/anthropics/claude-code/issues/86169) | \[BUG\] \`rate\_limits\` still missing from statusline JSON on v2.1.228 (macOS, Pro, firstParty auth) — same as closed #40094 | FourCellos | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:statusline, bug, has repro, platform:macos |
+| [#69449](https://github.com/anthropics/claude-code/issues/69449) | Feature request: FleetView (\`claude agents\`) should show the repo/project per session row | bakbukagency | OPEN | 5 (👍 5) | 5 | 2026-08-12 | 2026-06-18 | area:agent-view, enhancement |
+| [#24537](https://github.com/anthropics/claude-code/issues/24537) | \[FEATURE\] Agent Hierarchy Dashboard — unified real-time visualization for multi-agent workflows (TUI + Desktop) | woodrowpearson | OPEN | 17 (👍 17) | 15 | 2026-08-12 | 2026-02-09 | area:core, area:cost, area:ide, area:tools, area:tui, enhancement |
+
+<details>
+<summary>Show remaining 20</summary>
+
+| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |
+|---:|---|---|---|---:|---:|---|---|---|
+| [#82178](https://github.com/anthropics/claude-code/issues/82178) | Bash commands render unhighlighted in tool calls and permission dialogs, though highlight.js and \`bash\` already ship in the CLI | jonbwhite | OPEN | 2 (👍 2) | 1 | 2026-08-12 | 2026-07-29 | — |
+| [#85992](https://github.com/anthropics/claude-code/issues/85992) | \[BUG\] Issue: Session (5hr) usage limit exhausted within minutes on a lightweight document-edit task | infooiroioi | OPEN | 0 | 1 | 2026-08-12 | 2026-08-12 | area:cost, bug, platform:linux, platform:vscode |
+| [#86168](https://github.com/anthropics/claude-code/issues/86168) | \[FEATURE\] VS Code extension doesn't render Stop-hook systemMessage | Gaurav0 | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:hooks, area:vscode, enhancement, platform:vscode |
+| [#85901](https://github.com/anthropics/claude-code/issues/85901) | \[BUG\] \[CRASH\] {solution proposed} Shipped MSIX has no AppxMetadata\\CodeIntegrity.cat — vk\_swiftshader.dll blocked by Code Integrity, AppX container destroyed (0x3CFC) see most recent 2 comments for clearest summary | Yosef-Bunick | OPEN | 0 | 7 | 2026-08-12 | 2026-08-11 | area:cowork, area:desktop, bug, has repro, platform:windows |
+| [#86167](https://github.com/anthropics/claude-code/issues/86167) | \[BUG\] Renaming a session never updates its currently-open editor tab title (VS Code extension) | andy8780 | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:ide, bug, platform:vscode, platform:windows |
+| [#39429](https://github.com/anthropics/claude-code/issues/39429) | \[BUG\]macOS system shortcuts (Cmd+H, Cmd+M) not working when Claude panel is focused | Hnasar | OPEN | 7 (👍 7) | 8 | 2026-08-12 | 2026-03-26 | area:ide, bug, has repro, platform:macos, platform:vscode |
+| [#67419](https://github.com/anthropics/claude-code/issues/67419) | \[FEATURE\] \[VSCode extension\] Clicking a session in the sessions list ignores preferredLocation and always opens in an editor tab (no way to open in the secondary sidebar) | Finrod927 | OPEN | 2 (👍 2) | 3 | 2026-08-12 | 2026-06-11 | area:ide, enhancement, platform:vscode, platform:windows |
+| [#86166](https://github.com/anthropics/claude-code/issues/86166) | \[BUG\] Settings schema: \`strictKnownMarketplaces\` rejects \`source: "settings"\`, which the runtime accepts and enforces | shay-coh | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:plugins, bug |
+| [#86144](https://github.com/anthropics/claude-code/issues/86144) | \[FEATURE\] Windows installer should add %USERPROFILE%\\.local\\bin to the User PATH itself | AbdulrahmanAmer | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:installation, enhancement, platform:windows |
+| [#86165](https://github.com/anthropics/claude-code/issues/86165) | \[FEATURE\] Improve the data management side of Claude Code session data - use a SQLite3 db or similar | LevyBytes | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:core, enhancement |
+| [#18467](https://github.com/anthropics/claude-code/issues/18467) | \[BUG\] Personal account repositories not visible in Claude web, only organization repositories work | levibaldelomar | OPEN | 73 (👍 73) | 30 | 2026-08-12 | 2026-01-16 | bug, external, has repro |
+| [#84005](https://github.com/anthropics/claude-code/issues/84005) | \[BUG\] Windows MSIX updater repeatedly fails: CoworkVMService locks its own file (0x80070020), PreserveApplicationData removal rejected (0x80073CFA), stale-retry race (0x80070002) | XeonWood | OPEN | 0 | 4 | 2026-08-12 | 2026-08-05 | — |
+| [#61889](https://github.com/anthropics/claude-code/issues/61889) | CVP approved user being blocked on completely benign, non-security queries in fresh sessions on claude.ai (not Claude Code). | 7H35C4r3Cr0W | OPEN | 4 (👍 4) | 42 | 2026-08-12 | 2026-05-23 | invalid |
+| [#14828](https://github.com/anthropics/claude-code/issues/14828) | Windows: Console window flashing when executing tools | guanknow | OPEN | 36 (👍 36) | 61 | 2026-08-12 | 2025-12-20 | area:tools, bug, has repro, platform:windows |
+| [#71573](https://github.com/anthropics/claude-code/issues/71573) | \[Bug\] Enterprise login success message requires inconsistent key press to complete authentication | detemegandy | CLOSED / NOT\_PLANNED | 0 | 2 | 2026-08-12 | 2026-06-26 | area:auth, area:tui, bug, platform:macos |
+| [#86164](https://github.com/anthropics/claude-code/issues/86164) | \[BUG\] MCP stdio client fails on specific tool responses from a healthy, freshly-spawned server (works fine via raw JSON-RPC probe) | matt-raffel-kiva | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:mcp, bug, platform:macos |
+| [#86163](https://github.com/anthropics/claude-code/issues/86163) | \[FEATURE\] Let \`marketplace add\` set request headers, so token authenticated marketplaces are reachable without hand editing JSON | shay-coh | OPEN | 0 | 0 | 2026-08-12 | 2026-08-12 | area:cli, area:plugins, enhancement |
+| [#28791](https://github.com/anthropics/claude-code/issues/28791) | \[FEATURE\] Sync conversation history between CLI and Claude Code desktop app | moazam1 | OPEN | 146 (👍 123 · 🚀 23) | 32 | 2026-08-12 | 2026-02-26 | area:cli, area:desktop, enhancement |
+| [#86129](https://github.com/anthropics/claude-code/issues/86129) | Auto-updater prunes the running version's binary, silently breaking all subagent/teammate spawns mid-session | cballou | OPEN | 0 | 1 | 2026-08-12 | 2026-08-12 | area:agents, area:packaging, bug, has repro, platform:macos |
+| [#86160](https://github.com/anthropics/claude-code/issues/86160) | \[Bug\] Handoff functionality broken - Anthropic API error | allcounter | OPEN | 0 | 1 | 2026-08-12 | 2026-08-12 | area:api, bug, needs-repro, platform:macos |
+
+</details>
 <!-- AFFLR-RADAR:END -->
 
 Open and closed issues are included. The radar records useful public metadata such as the issue link, author, state, reactions, comments, timestamps, and labels.
