@@ -1,10 +1,9 @@
-# Anthropic Failure Forensics
+# AFFLR — Anthropic Failure Forensics Live Radar
 
 This repository documents reproducible failures, regressions, unsafe generated code, and broken or misleading behavior in Anthropic's Claude products — especially Claude Code and Claude models — using public issues, measurements, system artifacts, and forensic evidence.
 
-> **Project codename: AAGOCCFS**  
-> **Anthropic AI-Generated Operational Claude Code Failures & Slop**  
-> Yes, the acronym is intentionally painful. It started as a joke after too many debugging sessions turned into forensic investigations. **The joke stayed; the evidence standard did not.**
+> **AFFLR — Anthropic Failure Forensics Live Radar**  
+> A live discovery radar backed by a manually reviewed forensic case archive. **The name changed; the evidence standard did not.**
 
 ## Why this repository exists
 
@@ -36,6 +35,14 @@ Each case distinguishes, where applicable:
 | [AFF-005](cases/AFF-005-epson-bx635fwd-false-success/README.md) | — | Epson BX635FWD generated repair script | Generated operational code / Windows | Artifact + provenance confirmed; false-success defects confirmed; outage causality open |
 
 See [`cases/README.md`](cases/README.md) for the compact case format.
+
+## AFFLR live radar
+
+[`watchlist/candidates.md`](watchlist/candidates.md) is the automated discovery layer over public `anthropics/claude-code` issues. AFFLR checks the full issue search space hourly and exposes three objective Top-25 views: **most reacted**, **most discussed**, and **recently active**, including both open and closed issues. Changes are proposed through a review pull request rather than written directly into the case archive.
+
+The live radar is **discovery metadata, not evidence**. Reactions, comments, labels, and activity are useful signals for deciding what to inspect next, but inclusion does not assign an AFF evidence level or establish attribution. A finding enters the case archive only after manual review under **Evidence before attribution**.
+
+For the automated review-PR step, the repository's GitHub Actions workflow permissions must allow Actions to create pull requests. AFFLR does not require a personal access token or other third-party secret.
 
 ## Evidence levels
 
@@ -72,7 +79,7 @@ Maintenance is intentionally boring:
 3. Write only six things: **Summary, Impact, Evidence level, What is proven, What is not proven, References**.
 4. Add one row to the case index.
 
-No database, dashboard, required GitHub Action, or generated site is needed.
+No database, generated site, or automated case promotion is needed. AFFLR automation is deliberately limited to refreshing discovery metadata through a review PR.
 
 ## Scope and tone
 
