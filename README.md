@@ -80,6 +80,12 @@ The repository may contain criticism, but technical claims should remain falsifi
 
 Corrections are welcome. If a claim is disproved, superseded, or better explained by another root cause, the case should say so explicitly.
 
+## Support
+
+If this archive saves you debugging time, helps reproduce a failure, or provides useful evidence, you can support the ongoing forensic hamster maintenance here:
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?style=flat&logo=kofi&logoColor=white)](https://ko-fi.com/keilerhirsch)
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
