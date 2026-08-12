@@ -27,13 +27,13 @@ Each case distinguishes, where applicable:
 
 ## Case index
 
-| ID | Case | Area | Current evidence |
-|---|---|---|---|
-| [AFF-001](cases/AFF-001-windows-wildcard-permission-resolver/README.md) | Windows wildcard / permission resolver failure | Claude Code / Windows / permissions | Public upstream report + preserved forensic evidence; HackerOne disclosure reference |
-| [AFF-002](cases/AFF-002-hook-exit-code-2-collision/README.md) | Hook launch failure collides with deny exit code 2 | Claude Code / hooks | Minimal reproduction reported upstream |
-| [AFF-003](cases/AFF-003-gen5-quality-regression/README.md) | Claude Gen-5 quality regression measurements | Models / quality | Reproducible benchmark measurements reported upstream |
-| [AFF-004](cases/AFF-004-model-pinning-overrides/README.md) | Model pinning / resolution overrides | Claude Code / configuration / architecture | Multiple measured resolution paths reported upstream |
-| [AFF-005](cases/AFF-005-epson-bx635fwd-false-success/README.md) | Epson BX635FWD generated repair script | Generated operational code / Windows | Artifact + provenance confirmed; false-success defects confirmed; outage causality open |
+| ID | Upstream issue | Case | Area | Current evidence |
+|---|---|---|---|---|
+| [AFF-001](cases/AFF-001-windows-wildcard-permission-resolver/README.md) | [#34866](https://github.com/anthropics/claude-code/issues/34866) | Windows wildcard / permission resolver failure | Claude Code / Windows / permissions | Public upstream report + preserved forensic evidence; HackerOne disclosure reference |
+| [AFF-002](cases/AFF-002-hook-exit-code-2-collision/README.md) | [#80697](https://github.com/anthropics/claude-code/issues/80697) | Hook launch failure collides with deny exit code 2 | Claude Code / hooks | Minimal reproduction reported upstream |
+| [AFF-003](cases/AFF-003-gen5-quality-regression/README.md) | [#83510](https://github.com/anthropics/claude-code/issues/83510) | Claude Gen-5 quality regression measurements | Models / quality | Reproducible benchmark measurements reported upstream |
+| [AFF-004](cases/AFF-004-model-pinning-overrides/README.md) | [#83795](https://github.com/anthropics/claude-code/issues/83795) | Model pinning / resolution overrides | Claude Code / configuration / architecture | Multiple measured resolution paths reported upstream |
+| [AFF-005](cases/AFF-005-epson-bx635fwd-false-success/README.md) | — | Epson BX635FWD generated repair script | Generated operational code / Windows | Artifact + provenance confirmed; false-success defects confirmed; outage causality open |
 
 See [`cases/README.md`](cases/README.md) for the compact case format.
 
