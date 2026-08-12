@@ -1,0 +1,63 @@
+name: New forensic finding
+description: Capture a reproducible Anthropic / Claude failure for possible archival as an AFF case.
+title: "[FINDING] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep this small and falsifiable. Correlation is not causation; evidence level is not severity.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Why does it matter operationally?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: evidence
+    attributes:
+      label: Evidence level
+      options:
+        - L0 — Hypothesis
+        - L1 — Artifact observed
+        - L2 — Provenance established
+        - L3 — Execution established
+        - L4 — Failure reproduced or measured
+        - L5 — Causal chain established
+    validations:
+      required: true
+
+  - type: textarea
+    id: proven
+    attributes:
+      label: What is proven
+      description: List only direct observations, artifacts, measurements, or reproductions.
+    validations:
+      required: true
+
+  - type: textarea
+    id: not_proven
+    attributes:
+      label: What is not proven
+      description: State attribution gaps, competing explanations, or untested boundaries.
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Public upstream issues, artifacts, hashes, datasets, or documentation. Do not paste secrets or private disclosure contents.
+    validations:
+      required: true
