@@ -9,13 +9,13 @@ AFFLR watches the public [`anthropics/claude-code`](https://github.com/anthropic
 **⏱ Next automatic trigger:** every hour at **`:17 UTC`**  
 **🔁 Schedule:** hourly  
 **▶️ Manual trigger:** available in [GitHub Actions](../../actions/workflows/afflr.yml)  
-**📡 Current radar output:** [`watchlist/candidates.md`](watchlist/candidates.md)
+**📡 Full radar output:** [`watchlist/candidates.md`](watchlist/candidates.md)
 
-AFFLR currently exposes three objective Top-25 views:
+The **Top 5** of each view are visible directly below. Positions 6–25 stay one click away in the expandable sections.
 
-- 🔥 **Most reacted**
-- 💬 **Most discussed**
-- 🆕 **Recently active**
+<!-- AFFLR-RADAR:START -->
+> Direct-Live is installed. The first successful hourly/manual refresh will render the Top 5 + expandable remainder here.
+<!-- AFFLR-RADAR:END -->
 
 Open and closed issues are included. The radar records useful public metadata such as the issue link, author, state, reactions, comments, timestamps, and labels.
 
@@ -28,9 +28,9 @@ hourly scan
         ↓
 objective GitHub metadata
         ↓
-review PR
+README + full watchlist refresh
         ↓
-human review
+human evidence review
 ```
 
 The radar is discovery infrastructure, not an automatic truth machine.

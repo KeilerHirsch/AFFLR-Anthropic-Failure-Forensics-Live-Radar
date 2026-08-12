@@ -46,10 +46,21 @@ VIEW_TITLES = {
     "most-discussed": "Most discussed",
     "recently-active": "Recently active",
 }
+README_VIEW_TITLES = {
+    "most-reacted": "🔥 Most reacted",
+    "most-discussed": "💬 Most discussed",
+    "recently-active": "🆕 Recently active",
+}
 VIEW_ORDER = ("most-reacted", "most-discussed", "recently-active")
 SEARCH_ENDPOINT = "https://api.github.com/search/issues"
 SEARCH_SCOPE = "repo:anthropics/claude-code is:issue"
 EXPECTED_ISSUE_PREFIX = "https://github.com/anthropics/claude-code/issues/"
+TABLE_HEADER = (
+    "| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |"
+)
+TABLE_RULE = "|---:|---|---|---|---:|---:|---|---|---|"
+README_START = "<!-- AFFLR-RADAR:START -->"
+README_END = "<!-- AFFLR-RADAR:END -->"
 
 
 @dataclass(frozen=True)
@@ -257,6 +268,28 @@ def reaction_label(issue: IssueRecord) -> str:
     return f"{issue.reactions_total} ({detail})"
 
 
+def render_table_rows(issues: list[IssueRecord]) -> list[str]:
+    rows: list[str] = []
+    for issue in issues:
+        labels = ", ".join(issue.labels) if issue.labels else "—"
+        rows.append(
+            "| [#{number}]({url}) | {title} | {author} | {state} | {reactions} | "
+            "{comments} | {updated} | {created} | {labels} |".format(
+                number=issue.number,
+                url=issue.url,
+                title=escape_cell(issue.title),
+                author=escape_cell(issue.author),
+                state=escape_cell(state_label(issue)),
+                reactions=escape_cell(reaction_label(issue)),
+                comments=issue.comments,
+                updated=issue.updated_at[:10],
+                created=issue.created_at[:10],
+                labels=escape_cell(labels),
+            )
+        )
+    return rows
+
+
 def render_markdown(views: dict[str, list[IssueRecord]]) -> str:
     if set(views) != set(VIEW_ORDER):
         raise RadarError("missing or unexpected radar view")
@@ -277,30 +310,70 @@ def render_markdown(views: dict[str, list[IssueRecord]]) -> str:
             [
                 f"## {VIEW_TITLES[name]}",
                 "",
-                "| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |",
-                "|---:|---|---|---|---:|---:|---|---|---|",
+                TABLE_HEADER,
+                TABLE_RULE,
+                *render_table_rows(views[name][:25]),
+                "",
             ]
         )
-        for issue in views[name][:25]:
-            labels = ", ".join(issue.labels) if issue.labels else "—"
-            lines.append(
-                "| [#{number}]({url}) | {title} | {author} | {state} | {reactions} | "
-                "{comments} | {updated} | {created} | {labels} |".format(
-                    number=issue.number,
-                    url=issue.url,
-                    title=escape_cell(issue.title),
-                    author=escape_cell(issue.author),
-                    state=escape_cell(state_label(issue)),
-                    reactions=escape_cell(reaction_label(issue)),
-                    comments=issue.comments,
-                    updated=issue.updated_at[:10],
-                    created=issue.created_at[:10],
-                    labels=escape_cell(labels),
-                )
-            )
-        lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+def render_readme_fragment(views: dict[str, list[IssueRecord]]) -> str:
+    if set(views) != set(VIEW_ORDER):
+        raise RadarError("missing or unexpected radar view")
+
+    lines = [
+        "> Automated discovery metadata from public `anthropics/claude-code` issues. "
+        "Popularity is a discovery signal, not evidence.",
+        "",
+    ]
+
+    for name in VIEW_ORDER:
+        issues = views[name][:25]
+        visible = issues[:5]
+        hidden = issues[5:25]
+        lines.extend(
+            [
+                f"### {README_VIEW_TITLES[name]}",
+                "",
+                TABLE_HEADER,
+                TABLE_RULE,
+                *render_table_rows(visible),
+                "",
+            ]
+        )
+        if hidden:
+            lines.extend(
+                [
+                    "<details>",
+                    f"<summary>Show remaining {len(hidden)}</summary>",
+                    "",
+                    TABLE_HEADER,
+                    TABLE_RULE,
+                    *render_table_rows(hidden),
+                    "",
+                    "</details>",
+                    "",
+                ]
+            )
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def inject_readme_fragment(readme: str, fragment: str) -> str:
+    if readme.count(README_START) != 1 or readme.count(README_END) != 1:
+        raise RadarError("README must contain exactly one AFFLR radar marker pair")
+
+    start = readme.index(README_START)
+    end = readme.index(README_END)
+    if start >= end:
+        raise RadarError("AFFLR README markers are inverted")
+
+    before = readme[: start + len(README_START)]
+    after = readme[end:]
+    return before + "\n" + fragment.rstrip() + "\n" + after
 
 
 def fetch_json(url: str, opener=urlopen) -> dict[str, Any]:
@@ -336,17 +409,36 @@ def main(argv: list[str] | None = None) -> int:
         description="AFFLR — Anthropic Failure Forensics Live Radar"
     )
     parser.add_argument("--output", required=True)
+    parser.add_argument("--readme")
     args = parser.parse_args(argv)
 
-    # Nothing touches the destination until all requests, validation, and rendering pass.
-    rendered = render_markdown(collect_live_views())
+    # Collect and render everything before touching either destination.
+    views = collect_live_views()
+    rendered_watchlist = render_markdown(views)
+
+    readme_path = Path(args.readme) if args.readme else None
+    rendered_readme: str | None = None
+    if readme_path is not None:
+        existing_readme = readme_path.read_text(encoding="utf-8")
+        rendered_readme = inject_readme_fragment(
+            existing_readme, render_readme_fragment(views)
+        )
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    temp = output.with_suffix(output.suffix + ".tmp")
-    with temp.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write(rendered)
-    temp.replace(output)
+    output_temp = output.with_suffix(output.suffix + ".tmp")
+    with output_temp.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(rendered_watchlist)
+
+    readme_temp: Path | None = None
+    if readme_path is not None and rendered_readme is not None:
+        readme_temp = readme_path.with_suffix(readme_path.suffix + ".tmp")
+        with readme_temp.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(rendered_readme)
+
+    output_temp.replace(output)
+    if readme_temp is not None and readme_path is not None:
+        readme_temp.replace(readme_path)
     return 0
 
 
