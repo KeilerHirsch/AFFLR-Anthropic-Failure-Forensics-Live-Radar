@@ -2,53 +2,50 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build an hourly GitHub Actions radar that searches the full public `anthropics/claude-code` issue corpus and maintains a review-only PR containing objective Top-25 views by reactions, comments, and recent activity.
+**Goal:** Build an hourly review-gated radar that searches the full public `anthropics/claude-code` issue corpus and proposes objective Top-25 views by reactions, comments, and recent activity.
 
-**Architecture:** A dependency-free Python 3 script performs three unauthenticated GitHub Search API requests, validates and normalizes the returned issue metadata, compares each view with the last merged `main` baseline for `NEW`, and writes deterministic Markdown to a temporary output. A small GitHub Actions workflow runs it hourly, updates one persistent automation branch only when the rendered content changed, and creates at most one open PR. `GITHUB_TOKEN` is used only for git/PR operations inside `KeilerHirsch/anthropic-failure-forensics`.
+**Architecture:** A dependency-free Python 3 script makes exactly three unauthenticated GitHub Search API requests, validates/normalizes the returned metadata, and renders deterministic Markdown. A GitHub Actions workflow checks hourly, compares the render with `main`, and only when content changed updates one persistent automation branch and one open PR. The normal PR diff communicates additions/removals; no stored `NEW` marker or inferred score exists.
 
-**Tech Stack:** Python 3 standard library (`dataclasses`, `urllib`, `json`, `html`, `pathlib`, `argparse`, `unittest`), GitHub Search REST API, GitHub Actions, git, GitHub CLI (`gh`) for own-repository PR lookup/creation.
+**Tech Stack:** Python 3 standard library, `unittest`, GitHub Search REST API, GitHub Actions, git, GitHub CLI (`gh`) for PR lifecycle inside the workflow repository.
 
 ## Global Constraints
 
-- Search scope is exactly `repo:anthropics/claude-code is:issue`; open and closed issues share the same corpus.
-- Perform exactly three upstream searches per run: `sort:reactions-desc`, `sort:comments-desc`, and `sort:updated-desc`, each requesting exactly 25 rows.
-- Upstream requests are public and unauthenticated; never send `GITHUB_TOKEN` to `api.github.com/search/issues`.
-- `incomplete_results: true`, HTTP/rate-limit failure, invalid JSON, or missing required fields is a hard failure and must not replace the last known-good watchlist.
-- No AFF/forensic score, no AI ranking, no LLM, no root-cause inference, and no automatic `AFF-###` creation or modification.
-- `NEW` is view-specific and compares against the last merged `main` watchlist, not the current automation branch.
-- Output must be byte-stable for identical API responses and identical baseline; no generated timestamp or corpus count may create churn.
-- Scheduled cadence is exactly once per hour at a non-round minute; retain `workflow_dispatch`.
-- Workflow permissions are limited to `contents: write` and `pull-requests: write`.
-- Use no personal access token, GitHub App credential, analytics, telemetry, third-party action, or third-party Python package.
-- README must describe the radar as discovery metadata only and link to `watchlist/candidates.md` while preserving `Evidence before attribution`.
+- Search scope: exactly `repo:anthropics/claude-code is:issue`.
+- Three upstream queries only: `sort:reactions-desc`, `sort:comments-desc`, `sort:updated-desc`; each requests `per_page=25`.
+- Upstream search is public and unauthenticated. Never send `GITHUB_TOKEN` to `api.github.com/search/issues`.
+- `incomplete_results: true`, HTTP/rate-limit error, invalid JSON, or missing required metadata is a hard failure.
+- No AFF/forensic score, no HOT/STRONG/WATCH classification, no LLM, no automatic case creation or mutation.
+- Output is byte-stable for identical search responses; no generated timestamp or corpus counter.
+- Schedule: once per hour at a non-round minute plus `workflow_dispatch`.
+- Workflow permissions: `contents: write`, `pull-requests: write`, nothing broader.
+- At most one open radar PR. Unchanged output means no commit and no PR update.
+- No PAT, GitHub App secret, third-party Python package, third-party Action, telemetry, or analytics.
+- README must say the radar is discovery metadata, not evidence, and that changes remain behind a PR review gate.
 
 ---
 
 ## File Structure
 
-- Create: `scripts/claude_issue_radar.py` — pure normalization/ranking/rendering functions plus the public Search API CLI.
-- Create: `tests/test_claude_issue_radar.py` — stdlib `unittest` coverage for normalization, ranking, baseline parsing, Markdown safety, query construction, and fail-closed behavior.
-- Create: `watchlist/candidates.md` — initial live-generated last-known-good radar snapshot.
-- Create: `.github/workflows/claude-issue-radar.yml` — hourly/manual orchestration, change detection, persistent branch update, and single-PR management.
-- Modify: `README.md` — concise radar section linking the watchlist and explaining its non-evidentiary role.
-
-The Python file owns upstream data semantics and deterministic rendering. The workflow owns repository mutation and PR lifecycle. Neither layer may create or edit `cases/AFF-*`.
+- Create `scripts/claude_issue_radar.py`: search URL construction, HTTP client, strict normalization, objective ordering, Markdown renderer, atomic CLI output.
+- Create `tests/test_claude_issue_radar.py`: stdlib unit/contract tests.
+- Create `.github/workflows/claude-issue-radar.yml`: hourly/manual orchestration and single-PR branch lifecycle.
+- Create `watchlist/candidates.md`: initial live snapshot.
+- Modify `README.md`: small radar section only.
 
 ---
 
-### Task 1: Normalize GitHub Search Results and Define Objective Views
+### Task 1: Issue Model, Validation, and Objective Ordering
 
 **Files:**
 - Create: `scripts/claude_issue_radar.py`
 - Create: `tests/test_claude_issue_radar.py`
 
 **Interfaces:**
-- Produces: `IssueRecord`, `VIEW_SPECS`, `normalize_issue(raw: dict) -> IssueRecord`, `normalize_search_response(payload: dict) -> list[IssueRecord]`, `sort_view(view_name: str, issues: list[IssueRecord]) -> list[IssueRecord]`.
-- Consumes: raw GitHub Search API issue dictionaries.
+- Produces `RadarError`, `IssueRecord`, `normalize_issue()`, `normalize_search_response()`, `sort_view()`.
 
-- [ ] **Step 1: Write failing model and normalization tests**
+- [ ] **Step 1: Write failing normalization tests**
 
-Create `tests/test_claude_issue_radar.py` with:
+Create `tests/test_claude_issue_radar.py`:
 
 ```python
 import unittest
@@ -84,30 +81,27 @@ class RadarTests(unittest.TestCase):
         raw.update(overrides)
         return raw
 
-    def test_normalize_issue_preserves_observable_metadata(self):
+    def test_normalize_issue_preserves_metadata(self):
         issue = radar.normalize_issue(self.sample_issue())
         self.assertEqual(issue.number, 83510)
         self.assertEqual(issue.author, "KeilerHirsch")
         self.assertEqual(issue.reactions_total, 12)
         self.assertEqual(issue.comments, 34)
         self.assertEqual(issue.labels, ("bug", "model"))
-        self.assertEqual(issue.state, "open")
-        self.assertIsNone(issue.state_reason)
 
-    def test_normalize_closed_not_planned(self):
+    def test_closed_state_reason_is_preserved(self):
         issue = radar.normalize_issue(
             self.sample_issue(state="closed", state_reason="not_planned")
         )
-        self.assertEqual(issue.state, "closed")
         self.assertEqual(issue.state_reason, "not_planned")
 
-    def test_incomplete_search_response_is_rejected(self):
+    def test_incomplete_results_fail_closed(self):
         with self.assertRaises(radar.RadarError):
             radar.normalize_search_response(
                 {"incomplete_results": True, "items": [self.sample_issue()]}
             )
 
-    def test_missing_required_field_is_rejected(self):
+    def test_missing_required_field_fails_closed(self):
         raw = self.sample_issue()
         del raw["user"]
         with self.assertRaises(radar.RadarError):
@@ -116,19 +110,17 @@ class RadarTests(unittest.TestCase):
             )
 ```
 
-- [ ] **Step 2: Run the tests and verify RED**
-
-Run:
+- [ ] **Step 2: Run RED**
 
 ```bash
 python -m unittest tests.test_claude_issue_radar -v
 ```
 
-Expected: import/module failures because `scripts/claude_issue_radar.py` does not exist.
+Expected: import/module failure because implementation does not exist.
 
-- [ ] **Step 3: Implement the minimal data model and strict normalization**
+- [ ] **Step 3: Implement strict normalized records**
 
-Create `scripts/claude_issue_radar.py` beginning with:
+Create `scripts/claude_issue_radar.py`:
 
 ```python
 from __future__ import annotations
@@ -161,36 +153,38 @@ class IssueRecord:
     labels: tuple[str, ...]
 
 
-def _require(mapping: dict[str, Any], key: str) -> Any:
+def _need(mapping: dict[str, Any], key: str) -> Any:
     if key not in mapping:
         raise RadarError(f"missing required field: {key}")
     return mapping[key]
 
 
-def _require_iso8601(value: str, field: str) -> str:
+def _iso(value: Any, field: str) -> str:
+    if not isinstance(value, str):
+        raise RadarError(f"invalid {field}")
     try:
         datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except (TypeError, ValueError) as exc:
+    except ValueError as exc:
         raise RadarError(f"invalid {field}: {value!r}") from exc
     return value
 
 
 def normalize_issue(raw: dict[str, Any]) -> IssueRecord:
-    user = _require(raw, "user")
+    user = _need(raw, "user")
     if not isinstance(user, dict) or not isinstance(user.get("login"), str):
         raise RadarError("invalid user.login")
 
-    reactions = _require(raw, "reactions")
-    if not isinstance(reactions, dict):
+    reactions = _need(raw, "reactions")
+    if not isinstance(reactions, dict) or not isinstance(reactions.get("total_count"), int):
         raise RadarError("invalid reactions")
 
-    labels_raw = _require(raw, "labels")
+    labels_raw = _need(raw, "labels")
     if not isinstance(labels_raw, list):
         raise RadarError("invalid labels")
     labels = []
     for label in labels_raw:
         if not isinstance(label, dict) or not isinstance(label.get("name"), str):
-            raise RadarError("invalid label name")
+            raise RadarError("invalid label")
         labels.append(label["name"])
 
     reaction_pairs = []
@@ -200,26 +194,27 @@ def normalize_issue(raw: dict[str, Any]) -> IssueRecord:
             raise RadarError(f"invalid reaction count: {key}")
         reaction_pairs.append((key, value))
 
-    total = _require(reactions, "total_count")
-    if not isinstance(total, int):
-        raise RadarError("invalid reactions.total_count")
-
     state_reason = raw.get("state_reason")
     if state_reason is not None and not isinstance(state_reason, str):
         raise RadarError("invalid state_reason")
 
+    number = _need(raw, "number")
+    comments = _need(raw, "comments")
+    if not isinstance(number, int) or not isinstance(comments, int):
+        raise RadarError("invalid numeric issue metadata")
+
     return IssueRecord(
-        number=int(_require(raw, "number")),
-        title=str(_require(raw, "title")),
-        url=str(_require(raw, "html_url")),
+        number=number,
+        title=str(_need(raw, "title")),
+        url=str(_need(raw, "html_url")),
         author=user["login"],
-        state=str(_require(raw, "state")),
+        state=str(_need(raw, "state")),
         state_reason=state_reason,
-        reactions_total=total,
+        reactions_total=reactions["total_count"],
         reactions=tuple(reaction_pairs),
-        comments=int(_require(raw, "comments")),
-        created_at=_require_iso8601(str(_require(raw, "created_at")), "created_at"),
-        updated_at=_require_iso8601(str(_require(raw, "updated_at")), "updated_at"),
+        comments=comments,
+        created_at=_iso(_need(raw, "created_at"), "created_at"),
+        updated_at=_iso(_need(raw, "updated_at"), "updated_at"),
         labels=tuple(sorted(labels, key=str.casefold)),
     )
 
@@ -233,9 +228,7 @@ def normalize_search_response(payload: dict[str, Any]) -> list[IssueRecord]:
     return [normalize_issue(item) for item in items]
 ```
 
-- [ ] **Step 4: Run normalization tests and verify GREEN**
-
-Run:
+- [ ] **Step 4: Run GREEN**
 
 ```bash
 python -m unittest tests.test_claude_issue_radar -v
@@ -243,57 +236,22 @@ python -m unittest tests.test_claude_issue_radar -v
 
 Expected: four tests pass.
 
-- [ ] **Step 5: Add failing deterministic view-order tests**
+- [ ] **Step 5: Add failing deterministic tie-break tests**
 
-Append to `RadarTests`:
+Append:
 
 ```python
-    def test_most_reacted_tie_breaks_by_comments_updated_number(self):
-        raws = [
-            self.sample_issue(number=1, comments=2, updated_at="2026-08-12T09:00:00Z"),
-            self.sample_issue(number=2, comments=3, updated_at="2026-08-12T08:00:00Z"),
-            self.sample_issue(number=3, comments=3, updated_at="2026-08-12T10:00:00Z"),
-        ]
-        issues = [radar.normalize_issue(x) for x in raws]
+    def test_objective_tie_breakers_are_deterministic(self):
+        a = radar.normalize_issue(self.sample_issue(number=1, comments=4))
+        b_raw = self.sample_issue(number=2, comments=5)
+        b = radar.normalize_issue(b_raw)
         self.assertEqual(
-            [x.number for x in radar.sort_view("most-reacted", issues)],
-            [3, 2, 1],
-        )
-
-    def test_most_discussed_tie_breaks_by_reactions_updated_number(self):
-        a = self.sample_issue(number=1, comments=5)
-        a["reactions"]["total_count"] = 4
-        b = self.sample_issue(number=2, comments=5)
-        b["reactions"]["total_count"] = 9
-        issues = [radar.normalize_issue(a), radar.normalize_issue(b)]
-        self.assertEqual(
-            [x.number for x in radar.sort_view("most-discussed", issues)],
-            [2, 1],
-        )
-
-    def test_recently_active_tie_breaks_by_reactions_comments_number(self):
-        a = self.sample_issue(number=1, comments=20)
-        a["reactions"]["total_count"] = 2
-        b = self.sample_issue(number=2, comments=3)
-        b["reactions"]["total_count"] = 8
-        issues = [radar.normalize_issue(a), radar.normalize_issue(b)]
-        self.assertEqual(
-            [x.number for x in radar.sort_view("recently-active", issues)],
+            [x.number for x in radar.sort_view("most-reacted", [a, b])],
             [2, 1],
         )
 ```
 
-- [ ] **Step 6: Run ordering tests and verify RED**
-
-Run:
-
-```bash
-python -m unittest tests.test_claude_issue_radar -v
-```
-
-Expected: failures because `sort_view` is not defined.
-
-- [ ] **Step 7: Implement deterministic local view ordering**
+- [ ] **Step 6: Implement view specs and deterministic sort**
 
 Add:
 
@@ -305,308 +263,63 @@ VIEW_SPECS = {
 }
 
 
-def _timestamp(value: str) -> float:
+def _ts(value: str) -> float:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
 
 
 def sort_view(view_name: str, issues: list[IssueRecord]) -> list[IssueRecord]:
     if view_name == "most-reacted":
-        key = lambda x: (x.reactions_total, x.comments, _timestamp(x.updated_at), x.number)
+        key = lambda x: (x.reactions_total, x.comments, _ts(x.updated_at), x.number)
     elif view_name == "most-discussed":
-        key = lambda x: (x.comments, x.reactions_total, _timestamp(x.updated_at), x.number)
+        key = lambda x: (x.comments, x.reactions_total, _ts(x.updated_at), x.number)
     elif view_name == "recently-active":
-        key = lambda x: (_timestamp(x.updated_at), x.reactions_total, x.comments, x.number)
+        key = lambda x: (_ts(x.updated_at), x.reactions_total, x.comments, x.number)
     else:
         raise RadarError(f"unknown view: {view_name}")
     return sorted(issues, key=key, reverse=True)
 ```
 
-- [ ] **Step 8: Run all Task 1 tests and verify GREEN**
-
-Run:
+- [ ] **Step 7: Run GREEN and commit**
 
 ```bash
 python -m unittest tests.test_claude_issue_radar -v
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 9: Commit Task 1**
-
-```bash
 git add scripts/claude_issue_radar.py tests/test_claude_issue_radar.py
 git commit -m "feat: normalize Claude issue radar metadata"
 ```
 
 ---
 
-### Task 2: Render Deterministic Markdown and Compute View-Specific NEW Markers
+### Task 2: Exact Public Search Queries and Fail-Closed HTTP Client
 
 **Files:**
 - Modify: `scripts/claude_issue_radar.py`
 - Modify: `tests/test_claude_issue_radar.py`
 
 **Interfaces:**
-- Consumes: `dict[str, list[IssueRecord]]` keyed by `most-reacted`, `most-discussed`, `recently-active`.
-- Produces: `parse_baseline_views(markdown: str) -> dict[str, set[int]]`, `render_markdown(views, baseline_views) -> str`.
+- Produces `build_search_url()`, `fetch_json()`, `collect_views()`.
 
-- [ ] **Step 1: Add failing baseline-marker tests**
-
-Append:
+- [ ] **Step 1: Add failing exact-query test**
 
 ```python
-    def test_parse_baseline_views_reads_machine_markers(self):
-        baseline = """# Claude Issue Radar
-<!-- radar-view:most-reacted issues:10,20 -->
-<!-- radar-view:most-discussed issues:20,30 -->
-<!-- radar-view:recently-active issues:40 -->
-"""
-        self.assertEqual(
-            radar.parse_baseline_views(baseline),
-            {
-                "most-reacted": {10, 20},
-                "most-discussed": {20, 30},
-                "recently-active": {40},
-            },
-        )
-
-    def test_new_is_view_specific(self):
-        issue = radar.normalize_issue(self.sample_issue(number=20))
-        views = {
-            "most-reacted": [issue],
-            "most-discussed": [issue],
-            "recently-active": [issue],
-        }
-        baseline = {
-            "most-reacted": {20},
-            "most-discussed": set(),
-            "recently-active": {20},
-        }
-        rendered = radar.render_markdown(views, baseline)
-        reacted = rendered.split("## Most reacted", 1)[1].split("## Most discussed", 1)[0]
-        discussed = rendered.split("## Most discussed", 1)[1].split("## Recently active", 1)[0]
-        self.assertNotIn("**NEW**", reacted)
-        self.assertIn("**NEW**", discussed)
-```
-
-- [ ] **Step 2: Run tests and verify RED**
-
-Run:
-
-```bash
-python -m unittest tests.test_claude_issue_radar -v
-```
-
-Expected: missing `parse_baseline_views` / `render_markdown` failures.
-
-- [ ] **Step 3: Implement baseline markers, escaping, state labels, reactions, and renderer**
-
-Add imports and functions:
-
-```python
-import html
-import re
-
-VIEW_TITLES = {
-    "most-reacted": "Most reacted",
-    "most-discussed": "Most discussed",
-    "recently-active": "Recently active",
-}
-
-MARKER_RE = re.compile(r"<!-- radar-view:([a-z-]+) issues:([0-9,]*) -->")
-REACTION_EMOJI = {
-    "+1": "👍",
-    "-1": "👎",
-    "laugh": "😄",
-    "hooray": "🎉",
-    "confused": "😕",
-    "heart": "❤️",
-    "rocket": "🚀",
-    "eyes": "👀",
-}
-
-
-def parse_baseline_views(markdown: str) -> dict[str, set[int]]:
-    result = {name: set() for name in VIEW_SPECS}
-    for view_name, csv_numbers in MARKER_RE.findall(markdown):
-        if view_name not in result:
-            continue
-        result[view_name] = {
-            int(part) for part in csv_numbers.split(",") if part.strip()
-        }
-    return result
-
-
-def escape_cell(value: str) -> str:
-    value = html.escape(value, quote=False)
-    value = value.replace("\\", "\\\\").replace("|", "\\|")
-    return " ".join(value.splitlines())
-
-
-def state_label(issue: IssueRecord) -> str:
-    state = issue.state.upper()
-    if issue.state_reason:
-        state += " / " + issue.state_reason.upper()
-    return state
-
-
-def reaction_label(issue: IssueRecord) -> str:
-    nonzero = [
-        f"{REACTION_EMOJI[key]} {count}"
-        for key, count in issue.reactions
-        if count
-    ]
-    detail = " · ".join(nonzero)
-    return str(issue.reactions_total) if not detail else f"{issue.reactions_total} ({detail})"
-
-
-def short_date(value: str) -> str:
-    return value[:10]
-
-
-def render_markdown(
-    views: dict[str, list[IssueRecord]],
-    baseline_views: dict[str, set[int]],
-) -> str:
-    lines = [
-        "# Claude Issue Radar",
-        "",
-        "> Automated discovery metadata from public `anthropics/claude-code` issues. "
-        "Inclusion here is **not** AFF acceptance, an evidence level, or causal attribution.",
-        "",
-        "The radar shows objective GitHub metadata only. `NEW` means an issue newly entered "
-        "that specific Top-25 view relative to the last merged `main` snapshot.",
-        "",
-    ]
-
-    for view_name in ("most-reacted", "most-discussed", "recently-active"):
-        issues = views[view_name][:25]
-        marker = ",".join(str(issue.number) for issue in issues)
-        lines.extend([
-            f"<!-- radar-view:{view_name} issues:{marker} -->",
-            f"## {VIEW_TITLES[view_name]}",
-            "",
-            "| New | Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |",
-            "|---|---:|---|---|---|---:|---:|---|---|---|",
-        ])
-        prior = baseline_views.get(view_name, set())
-        for issue in issues:
-            new = "**NEW**" if issue.number not in prior else ""
-            labels = ", ".join(issue.labels) if issue.labels else "—"
-            lines.append(
-                "| {new} | [#{number}]({url}) | {title} | {author} | {state} | "
-                "{reactions} | {comments} | {updated} | {created} | {labels} |".format(
-                    new=new,
-                    number=issue.number,
-                    url=issue.url,
-                    title=escape_cell(issue.title),
-                    author=escape_cell(issue.author),
-                    state=escape_cell(state_label(issue)),
-                    reactions=escape_cell(reaction_label(issue)),
-                    comments=issue.comments,
-                    updated=short_date(issue.updated_at),
-                    created=short_date(issue.created_at),
-                    labels=escape_cell(labels),
-                )
-            )
-        lines.append("")
-
-    return "\n".join(lines).rstrip() + "\n"
-```
-
-- [ ] **Step 4: Add failing Markdown safety and determinism tests**
-
-Append:
-
-```python
-    def test_markdown_table_escapes_pipe_and_html(self):
-        issue = radar.normalize_issue(
-            self.sample_issue(title="bad | title <script>")
-        )
-        views = {name: [issue] for name in radar.VIEW_SPECS}
-        rendered = radar.render_markdown(
-            views, {name: set() for name in radar.VIEW_SPECS}
-        )
-        self.assertIn("bad \\| title &lt;script&gt;", rendered)
-        self.assertNotIn("<script>", rendered)
-
-    def test_render_is_byte_stable_for_same_input(self):
-        issue = radar.normalize_issue(self.sample_issue())
-        views = {name: [issue] for name in radar.VIEW_SPECS}
-        baseline = {name: {issue.number} for name in radar.VIEW_SPECS}
-        self.assertEqual(
-            radar.render_markdown(views, baseline),
-            radar.render_markdown(views, baseline),
-        )
-```
-
-- [ ] **Step 5: Run Task 2 tests and verify GREEN**
-
-Run:
-
-```bash
-python -m unittest tests.test_claude_issue_radar -v
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 6: Commit Task 2**
-
-```bash
-git add scripts/claude_issue_radar.py tests/test_claude_issue_radar.py
-git commit -m "feat: render deterministic Claude issue radar"
-```
-
----
-
-### Task 3: Implement the Three Public Search Requests and Fail-Closed CLI
-
-**Files:**
-- Modify: `scripts/claude_issue_radar.py`
-- Modify: `tests/test_claude_issue_radar.py`
-
-**Interfaces:**
-- Produces: `build_search_url(view_name: str) -> str`, `fetch_json(url: str, opener=urlopen) -> dict`, `collect_views(fetcher=fetch_json) -> dict[str, list[IssueRecord]]`, `main(argv=None) -> int`.
-- CLI: `python scripts/claude_issue_radar.py --baseline PATH --output PATH`.
-
-- [ ] **Step 1: Add failing exact-query tests**
-
-Append:
-
-```python
-    def test_search_urls_scope_all_issues_and_request_exactly_25(self):
-        reacted = radar.build_search_url("most-reacted")
-        discussed = radar.build_search_url("most-discussed")
-        recent = radar.build_search_url("recently-active")
-
-        for url in (reacted, discussed, recent):
-            self.assertIn("per_page=25", url)
+    def test_search_urls_use_full_issue_scope_and_top_25(self):
+        urls = {name: radar.build_search_url(name) for name in radar.VIEW_SPECS}
+        for url in urls.values():
             self.assertIn("repo%3Aanthropics%2Fclaude-code", url)
             self.assertIn("is%3Aissue", url)
-
-        self.assertIn("sort%3Areactions-desc", reacted)
-        self.assertIn("sort%3Acomments-desc", discussed)
-        self.assertIn("sort%3Aupdated-desc", recent)
+            self.assertIn("per_page=25", url)
+        self.assertIn("sort%3Areactions-desc", urls["most-reacted"])
+        self.assertIn("sort%3Acomments-desc", urls["most-discussed"])
+        self.assertIn("sort%3Aupdated-desc", urls["recently-active"])
 ```
 
-- [ ] **Step 2: Run query test and verify RED**
+Run and confirm RED.
 
-Run:
+- [ ] **Step 2: Implement URL construction and unauthenticated fetch**
 
-```bash
-python -m unittest tests.test_claude_issue_radar.RadarTests.test_search_urls_scope_all_issues_and_request_exactly_25 -v
-```
-
-Expected: missing `build_search_url`.
-
-- [ ] **Step 3: Implement exact URL construction and HTTP/JSON validation without auth headers**
-
-Add imports and code:
+Add:
 
 ```python
-import argparse
 import json
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -621,8 +334,9 @@ def build_search_url(view_name: str) -> str:
         sort_clause = VIEW_SPECS[view_name]
     except KeyError as exc:
         raise RadarError(f"unknown view: {view_name}") from exc
-    query = f"{SEARCH_SCOPE} {sort_clause}"
-    return f"{SEARCH_ENDPOINT}?{urlencode({'q': query, 'per_page': 25})}"
+    return SEARCH_ENDPOINT + "?" + urlencode(
+        {"q": f"{SEARCH_SCOPE} {sort_clause}", "per_page": 25}
+    )
 
 
 def fetch_json(url: str, opener=urlopen) -> dict[str, Any]:
@@ -634,84 +348,205 @@ def fetch_json(url: str, opener=urlopen) -> dict[str, Any]:
             "User-Agent": "KeilerHirsch-anthropic-failure-forensics-radar",
         },
     )
-    # Deliberately no Authorization header: never leak the workflow token upstream.
+    # Intentionally no Authorization header.
     try:
         with opener(request, timeout=30) as response:
-            body = response.read()
+            raw = response.read()
     except (HTTPError, URLError, TimeoutError) as exc:
-        raise RadarError(f"GitHub search request failed: {url}") from exc
+        raise RadarError("GitHub search request failed") from exc
     try:
-        payload = json.loads(body)
+        payload = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise RadarError("GitHub search returned invalid JSON") from exc
     if not isinstance(payload, dict):
-        raise RadarError("GitHub search returned a non-object payload")
+        raise RadarError("GitHub search returned non-object JSON")
     return payload
 
 
 def collect_views(fetcher=fetch_json) -> dict[str, list[IssueRecord]]:
-    views = {}
-    for view_name in ("most-reacted", "most-discussed", "recently-active"):
-        payload = fetcher(build_search_url(view_name))
-        issues = normalize_search_response(payload)
+    result = {}
+    for name in ("most-reacted", "most-discussed", "recently-active"):
+        issues = normalize_search_response(fetcher(build_search_url(name)))
         if len(issues) > 25:
-            raise RadarError(f"GitHub returned more than 25 rows for {view_name}")
-        views[view_name] = sort_view(view_name, issues)
-    return views
+            raise RadarError(f"too many rows returned for {name}")
+        result[name] = sort_view(name, issues)
+    return result
 ```
 
-- [ ] **Step 4: Add failing tests proving three requests and fail-closed behavior**
-
-Append:
+- [ ] **Step 3: Add request-count and incomplete-result tests**
 
 ```python
     def test_collect_views_makes_exactly_three_requests(self):
         calls = []
-
         def fake_fetch(url):
             calls.append(url)
-            return {
-                "incomplete_results": False,
-                "items": [self.sample_issue(number=len(calls))],
-            }
-
+            return {"incomplete_results": False, "items": [self.sample_issue(number=len(calls))]}
         views = radar.collect_views(fake_fetch)
         self.assertEqual(len(calls), 3)
         self.assertEqual(set(views), set(radar.VIEW_SPECS))
 
-    def test_collection_stops_on_incomplete_result(self):
+    def test_collection_aborts_on_incomplete_response(self):
         def fake_fetch(_url):
             return {"incomplete_results": True, "items": []}
-
         with self.assertRaises(radar.RadarError):
             radar.collect_views(fake_fetch)
 ```
 
-- [ ] **Step 5: Add CLI that writes only after every request and render succeeded**
+- [ ] **Step 4: Run GREEN and prove no auth header exists**
+
+```bash
+python -m unittest discover -s tests -v
+grep -n "Authorization" scripts/claude_issue_radar.py && exit 1 || true
+```
+
+Expected: tests pass; grep returns no source match.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/claude_issue_radar.py tests/test_claude_issue_radar.py
+git commit -m "feat: query public Claude issue search views"
+```
+
+---
+
+### Task 3: Deterministic Markdown Renderer and Atomic CLI
+
+**Files:**
+- Modify: `scripts/claude_issue_radar.py`
+- Modify: `tests/test_claude_issue_radar.py`
+
+**Interfaces:**
+- Produces `render_markdown()`, `main()`.
+- CLI: `python3 scripts/claude_issue_radar.py --output PATH`.
+
+- [ ] **Step 1: Add failing render tests**
+
+```python
+    def test_render_contains_required_metadata_and_escapes_table_text(self):
+        issue = radar.normalize_issue(self.sample_issue(title="bad | title <script>"))
+        views = {name: [issue] for name in radar.VIEW_SPECS}
+        text = radar.render_markdown(views)
+        self.assertIn("[#83510]", text)
+        self.assertIn("KeilerHirsch", text)
+        self.assertIn("12 (", text)
+        self.assertIn("34", text)
+        self.assertIn("bad \\| title &lt;script&gt;", text)
+        self.assertNotIn("<script>", text)
+
+    def test_render_has_no_scores_or_new_marker(self):
+        issue = radar.normalize_issue(self.sample_issue())
+        text = radar.render_markdown({name: [issue] for name in radar.VIEW_SPECS})
+        self.assertNotIn("Forensic score", text)
+        self.assertNotIn("**NEW**", text)
+
+    def test_render_is_byte_stable(self):
+        issue = radar.normalize_issue(self.sample_issue())
+        views = {name: [issue] for name in radar.VIEW_SPECS}
+        self.assertEqual(radar.render_markdown(views), radar.render_markdown(views))
+```
+
+Run RED.
+
+- [ ] **Step 2: Implement renderer**
 
 Add:
 
 ```python
+import html
+
+VIEW_TITLES = {
+    "most-reacted": "Most reacted",
+    "most-discussed": "Most discussed",
+    "recently-active": "Recently active",
+}
+
+REACTION_EMOJI = {
+    "+1": "👍", "-1": "👎", "laugh": "😄", "hooray": "🎉",
+    "confused": "😕", "heart": "❤️", "rocket": "🚀", "eyes": "👀",
+}
+
+
+def escape_cell(value: str) -> str:
+    value = html.escape(value, quote=False)
+    value = value.replace("\\", "\\\\").replace("|", "\\|")
+    return " ".join(value.splitlines())
+
+
+def state_label(issue: IssueRecord) -> str:
+    label = issue.state.upper()
+    if issue.state_reason:
+        label += " / " + issue.state_reason.upper()
+    return label
+
+
+def reaction_label(issue: IssueRecord) -> str:
+    detail = " · ".join(
+        f"{REACTION_EMOJI[key]} {count}"
+        for key, count in issue.reactions
+        if count
+    )
+    return str(issue.reactions_total) if not detail else f"{issue.reactions_total} ({detail})"
+
+
+def render_markdown(views: dict[str, list[IssueRecord]]) -> str:
+    lines = [
+        "# Claude Issue Radar",
+        "",
+        "> Automated discovery metadata from public `anthropics/claude-code` issues. "
+        "Inclusion here is **not** AFF acceptance, an evidence level, or causal attribution.",
+        "",
+    ]
+    for name in ("most-reacted", "most-discussed", "recently-active"):
+        lines.extend([
+            f"## {VIEW_TITLES[name]}",
+            "",
+            "| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |",
+            "|---:|---|---|---|---:|---:|---|---|---|",
+        ])
+        for issue in views[name][:25]:
+            labels = ", ".join(issue.labels) if issue.labels else "—"
+            lines.append(
+                "| [#{n}]({url}) | {title} | {author} | {state} | {reactions} | "
+                "{comments} | {updated} | {created} | {labels} |".format(
+                    n=issue.number,
+                    url=issue.url,
+                    title=escape_cell(issue.title),
+                    author=escape_cell(issue.author),
+                    state=escape_cell(state_label(issue)),
+                    reactions=escape_cell(reaction_label(issue)),
+                    comments=issue.comments,
+                    updated=issue.updated_at[:10],
+                    created=issue.created_at[:10],
+                    labels=escape_cell(labels),
+                )
+            )
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+```
+
+- [ ] **Step 3: Add atomic CLI and failure-preservation test**
+
+Add implementation:
+
+```python
+import argparse
+from pathlib import Path
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--baseline", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
 
-    baseline_path = Path(args.baseline)
-    output_path = Path(args.output)
-    baseline_text = baseline_path.read_text(encoding="utf-8") if baseline_path.exists() else ""
-    baseline_views = parse_baseline_views(baseline_text)
-
-    # All network/validation/render work completes before the destination is touched.
     views = collect_views()
-    rendered = render_markdown(views, baseline_views)
+    rendered = render_markdown(views)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = output_path.with_suffix(output_path.suffix + ".tmp")
-    temp_path.write_text(rendered, encoding="utf-8", newline="\n")
-    temp_path.replace(output_path)
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temp = output.with_suffix(output.suffix + ".tmp")
+    temp.write_text(rendered, encoding="utf-8", newline="\n")
+    temp.replace(output)
     return 0
 
 
@@ -719,9 +554,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 6: Add a CLI failure test that proves the existing output survives**
-
-Add imports `tempfile`, `unittest.mock.patch`, `pathlib.Path` to the test file, then append:
+Add test:
 
 ```python
     def test_cli_failure_does_not_replace_existing_output(self):
@@ -730,66 +563,40 @@ Add imports `tempfile`, `unittest.mock.patch`, `pathlib.Path` to the test file, 
         from unittest.mock import patch
 
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            baseline = root / "baseline.md"
-            output = root / "output.md"
-            baseline.write_text("old baseline\n", encoding="utf-8")
+            output = Path(tmp) / "radar.md"
             output.write_text("last known good\n", encoding="utf-8")
-
             with patch.object(radar, "collect_views", side_effect=radar.RadarError("boom")):
                 with self.assertRaises(radar.RadarError):
-                    radar.main(["--baseline", str(baseline), "--output", str(output)])
-
+                    radar.main(["--output", str(output)])
             self.assertEqual(output.read_text(encoding="utf-8"), "last known good\n")
 ```
 
-- [ ] **Step 7: Run all unit tests and verify GREEN**
-
-Run:
+- [ ] **Step 4: Run GREEN, compile, commit**
 
 ```bash
 python -m unittest discover -s tests -v
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 8: Compile the script**
-
-Run:
-
-```bash
 python -m py_compile scripts/claude_issue_radar.py
-```
-
-Expected: exit 0.
-
-- [ ] **Step 9: Commit Task 3**
-
-```bash
 git add scripts/claude_issue_radar.py tests/test_claude_issue_radar.py
-git commit -m "feat: collect public Claude issue radar views"
+git commit -m "feat: render deterministic Claude issue radar"
 ```
 
 ---
 
-### Task 4: Add Hourly GitHub Actions PR Automation
+### Task 4: Hourly Single-PR GitHub Actions Workflow
 
 **Files:**
 - Create: `.github/workflows/claude-issue-radar.yml`
-- Test: existing `tests/test_claude_issue_radar.py` plus workflow text assertions.
+- Modify: `tests/test_claude_issue_radar.py`
 
 **Interfaces:**
-- Consumes: `scripts/claude_issue_radar.py`, current `main` `watchlist/candidates.md` baseline.
-- Produces: persistent branch `automation/claude-issue-radar` and at most one open PR titled `chore: update Claude issue radar`.
+- Persistent branch: `automation/claude-issue-radar`.
+- Stable PR title: `chore: update Claude issue radar`.
 
 - [ ] **Step 1: Add failing workflow contract test**
 
-Append to the test file:
-
 ```python
-    def test_workflow_contract_is_hourly_and_least_privilege(self):
+    def test_workflow_contract(self):
         from pathlib import Path
-
         text = Path(".github/workflows/claude-issue-radar.yml").read_text(encoding="utf-8")
         self.assertIn("cron: '17 * * * *'", text)
         self.assertIn("workflow_dispatch:", text)
@@ -797,20 +604,11 @@ Append to the test file:
         self.assertIn("pull-requests: write", text)
         self.assertIn("automation/claude-issue-radar", text)
         self.assertNotIn("secrets.PAT", text)
-        self.assertNotIn("Authorization: Bearer", text)
 ```
 
-- [ ] **Step 2: Run the workflow contract test and verify RED**
+Run RED.
 
-Run:
-
-```bash
-python -m unittest tests.test_claude_issue_radar.RadarTests.test_workflow_contract_is_hourly_and_least_privilege -v
-```
-
-Expected: file-not-found failure.
-
-- [ ] **Step 3: Create the hourly workflow**
+- [ ] **Step 2: Create workflow**
 
 Create `.github/workflows/claude-issue-radar.yml`:
 
@@ -840,13 +638,10 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Render radar from public GitHub search
-        run: |
-          python3 scripts/claude_issue_radar.py \
-            --baseline watchlist/candidates.md \
-            --output /tmp/candidates.md
+      - name: Render public issue radar
+        run: python3 scripts/claude_issue_radar.py --output /tmp/candidates.md
 
-      - name: Stop when radar content is unchanged
+      - name: Detect content change
         id: diff
         shell: bash
         run: |
@@ -872,54 +667,35 @@ jobs:
           git commit -m "chore: update Claude issue radar"
           git push --force-with-lease origin "HEAD:refs/heads/${BRANCH}"
 
-      - name: Create radar PR when needed
+      - name: Create radar PR if none is open
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: automation/claude-issue-radar
         run: |
           set -euo pipefail
-          count="$(gh pr list \
-            --repo "$GITHUB_REPOSITORY" \
-            --state open \
-            --base main \
-            --head "$BRANCH" \
-            --json number \
-            --jq 'length')"
+          count="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base main --head "$BRANCH" --json number --jq 'length')"
           if [ "$count" = "0" ]; then
             gh pr create \
               --repo "$GITHUB_REPOSITORY" \
               --base main \
               --head "$BRANCH" \
               --title "chore: update Claude issue radar" \
-              --body "Automated hourly refresh of objective public GitHub issue metadata. Radar inclusion is discovery only and does not imply AFF acceptance, evidence level, or causal attribution."
+              --body "Automated hourly check of objective public GitHub issue metadata. Radar inclusion is discovery only and does not imply AFF acceptance, evidence level, or causal attribution."
           fi
 ```
 
-The upstream Python HTTP client contains no `Authorization` header; `GH_TOKEN` exists only in the final own-repository PR step.
-
-- [ ] **Step 4: Run the workflow contract and all unit tests**
-
-Run:
+- [ ] **Step 3: Run contract tests and static safety checks**
 
 ```bash
 python -m unittest discover -s tests -v
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 5: Sanity-check the workflow text for forbidden mutation paths**
-
-Run:
-
-```bash
 grep -n "AFF-\|cases/" .github/workflows/claude-issue-radar.yml && exit 1 || true
-grep -n "PAT\|API_KEY\|TOKEN" .github/workflows/claude-issue-radar.yml
+grep -n "PAT\|API_KEY" .github/workflows/claude-issue-radar.yml && exit 1 || true
 ```
 
-Expected: first command produces no matches; second may show only `GH_TOKEN: ${{ github.token }}`.
+Expected: tests pass; no forbidden paths/secrets.
 
-- [ ] **Step 6: Commit Task 4**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/claude-issue-radar.yml tests/test_claude_issue_radar.py
@@ -928,123 +704,79 @@ git commit -m "feat: automate hourly Claude issue radar PR"
 
 ---
 
-### Task 5: Generate the Initial Radar Snapshot and Document It in README
+### Task 5: Live Snapshot and README Integration
 
 **Files:**
 - Create: `watchlist/candidates.md`
 - Modify: `README.md`
 - Modify: `tests/test_claude_issue_radar.py`
 
-**Interfaces:**
-- Produces: first last-known-good watchlist baseline and public README entry point.
-
-- [ ] **Step 1: Add failing README contract test**
-
-Append:
-
-```python
-    def test_readme_describes_radar_without_claiming_evidence(self):
-        from pathlib import Path
-
-        text = Path("README.md").read_text(encoding="utf-8")
-        self.assertIn("## Claude issue radar", text)
-        self.assertIn("watchlist/candidates.md", text)
-        self.assertIn("discovery metadata", text)
-        self.assertIn("Evidence before attribution", text)
-```
-
-- [ ] **Step 2: Run the README contract test and verify RED**
-
-Run:
+- [ ] **Step 1: Run live generation to temporary output**
 
 ```bash
-python -m unittest tests.test_claude_issue_radar.RadarTests.test_readme_describes_radar_without_claiming_evidence -v
+python3 scripts/claude_issue_radar.py --output /tmp/claude-radar.md
 ```
 
-Expected: failure because the radar section is not present.
+Expected: exit 0 after exactly three public search requests.
 
-- [ ] **Step 3: Run a live three-query generation into a temporary file**
-
-Run:
+- [ ] **Step 2: Inspect live output mechanically**
 
 ```bash
-python3 scripts/claude_issue_radar.py \
-  --baseline /dev/null \
-  --output /tmp/claude-radar.md
+head -30 /tmp/claude-radar.md
+grep -c '^| \[#[0-9]' /tmp/claude-radar.md
 ```
 
-Expected: exit 0; exactly three public search calls; `/tmp/claude-radar.md` contains all three sections and 25 rows per section when GitHub returns 25 results.
+Expected: disclaimer plus three sections; normally 75 issue rows when each query returns 25 rows.
 
-- [ ] **Step 4: Inspect the live output before accepting it**
-
-Run:
-
-```bash
-head -40 /tmp/claude-radar.md
-grep -c '^| .*\[#[0-9]' /tmp/claude-radar.md
-```
-
-Expected: disclaimer visible; row count is 75 when every view returns 25 results.
-
-- [ ] **Step 5: Install the verified live snapshot**
-
-Run:
+- [ ] **Step 3: Install initial snapshot**
 
 ```bash
 mkdir -p watchlist
 cp /tmp/claude-radar.md watchlist/candidates.md
 ```
 
-- [ ] **Step 6: Add a concise radar section to README**
+- [ ] **Step 4: Add README contract test**
 
-Insert after the Case index / `cases/README.md` paragraph and before `## Evidence levels`:
+```python
+    def test_readme_explains_radar_review_gate(self):
+        from pathlib import Path
+        text = Path("README.md").read_text(encoding="utf-8")
+        self.assertIn("## Claude issue radar", text)
+        self.assertIn("watchlist/candidates.md", text)
+        self.assertIn("discovery metadata", text)
+        self.assertIn("review", text.lower())
+        self.assertIn("Evidence before attribution", text)
+```
+
+Run RED before editing README.
+
+- [ ] **Step 5: Add README section after the Case index and before Evidence levels**
+
+Insert:
 
 ```markdown
 ## Claude issue radar
 
-[`watchlist/candidates.md`](watchlist/candidates.md) is an automated discovery view over public `anthropics/claude-code` issues. It refreshes hourly and shows three objective Top-25 views: **most reacted**, **most discussed**, and **recently active**, including both open and closed issues.
+[`watchlist/candidates.md`](watchlist/candidates.md) is an automated discovery view over public `anthropics/claude-code` issues. The radar checks the full issue corpus hourly and exposes three objective Top-25 views: **most reacted**, **most discussed**, and **recently active**, including both open and closed issues. Changes are proposed through a review pull request rather than written directly to the case archive.
 
 The radar is **discovery metadata, not evidence**. Reactions, comments, labels, and activity are useful signals for deciding what to inspect next, but inclusion does not assign an AFF evidence level or establish attribution. A finding enters the case archive only after manual review under **Evidence before attribution**.
 ```
 
-- [ ] **Step 7: Run all tests**
-
-Run:
+- [ ] **Step 6: Run full tests and commit**
 
 ```bash
 python -m unittest discover -s tests -v
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 8: Verify the generated snapshot has no accidental auth/secrets or generated timestamp churn**
-
-Run:
-
-```bash
-grep -Ein 'token|authorization|secret|generated at|last generated' watchlist/candidates.md && exit 1 || true
-```
-
-Expected: no matches.
-
-- [ ] **Step 9: Commit Task 5**
-
-```bash
 git add README.md watchlist/candidates.md tests/test_claude_issue_radar.py
 git commit -m "docs: publish Claude issue radar"
 ```
 
 ---
 
-### Task 6: End-to-End Verification and Review Gate
+### Task 6: Final Verification and Review Gate
 
-**Files:**
-- Verify only; modify files only if verification exposes a defect.
+**Files:** verify only unless a defect is found.
 
-**Interfaces:**
-- Confirms every design invariant before a PR is opened/merged.
-
-- [ ] **Step 1: Run the complete test suite fresh**
+- [ ] **Step 1: Fresh full test suite**
 
 ```bash
 python -m unittest discover -s tests -v
@@ -1052,7 +784,7 @@ python -m unittest discover -s tests -v
 
 Expected: zero failures/errors.
 
-- [ ] **Step 2: Compile the implementation fresh**
+- [ ] **Step 2: Fresh compile**
 
 ```bash
 python -m py_compile scripts/claude_issue_radar.py
@@ -1060,25 +792,15 @@ python -m py_compile scripts/claude_issue_radar.py
 
 Expected: exit 0.
 
-- [ ] **Step 3: Prove deterministic rendering against the same live-derived fixtures/output**
-
-Run twice using the same baseline and immediate live API state:
+- [ ] **Step 3: Prove no token can reach upstream search code**
 
 ```bash
-python3 scripts/claude_issue_radar.py --baseline watchlist/candidates.md --output /tmp/radar-a.md
-cp /tmp/radar-a.md /tmp/radar-a-copy.md
-python3 scripts/claude_issue_radar.py --baseline watchlist/candidates.md --output /tmp/radar-b.md
+grep -n "Authorization\|GITHUB_TOKEN\|GH_TOKEN" scripts/claude_issue_radar.py && exit 1 || true
 ```
 
-If upstream changed between the two calls, do not call that a determinism failure; instead capture one API response set as fixtures and render it twice in a unit test. For identical fixture input, byte comparison must pass:
+Expected: no matches.
 
-```bash
-cmp /tmp/radar-a-copy.md /tmp/radar-b.md
-```
-
-Expected when upstream is unchanged during the few seconds between calls: exit 0.
-
-- [ ] **Step 4: Verify the workflow schedule and permissions mechanically**
+- [ ] **Step 4: Prove workflow cadence and permissions**
 
 ```bash
 grep -F "cron: '17 * * * *'" .github/workflows/claude-issue-radar.yml
@@ -1086,34 +808,33 @@ grep -F "contents: write" .github/workflows/claude-issue-radar.yml
 grep -F "pull-requests: write" .github/workflows/claude-issue-radar.yml
 ```
 
-Expected: all three lines found.
+Expected: all present.
 
-- [ ] **Step 5: Verify the implementation cannot touch AFF cases**
-
-```bash
-grep -RInE 'cases/AFF-|AFF-[0-9]{3}' scripts .github/workflows tests || true
-```
-
-Expected: no mutation logic referencing `cases/AFF-*`; only a test assertion/string is acceptable if deliberately present.
-
-- [ ] **Step 6: Verify upstream requests are unauthenticated in source**
+- [ ] **Step 5: Prove no AFF mutation path exists**
 
 ```bash
-grep -n "Authorization" scripts/claude_issue_radar.py && exit 1 || true
-grep -n "GITHUB_TOKEN\|GH_TOKEN" scripts/claude_issue_radar.py && exit 1 || true
+grep -RInE 'cases/AFF-|AFF-[0-9]{3}' scripts .github/workflows || true
 ```
 
 Expected: no matches.
 
-- [ ] **Step 7: Review the branch diff**
+- [ ] **Step 6: Verify generated file contains no score or churn marker**
+
+```bash
+grep -Ein 'forensic score|aff score|\*\*NEW\*\*|generated at|last generated' watchlist/candidates.md && exit 1 || true
+```
+
+Expected: no matches.
+
+- [ ] **Step 7: Inspect complete branch diff**
 
 ```bash
 git diff main...HEAD -- README.md scripts/claude_issue_radar.py tests/test_claude_issue_radar.py .github/workflows/claude-issue-radar.yml watchlist/candidates.md
 ```
 
-Confirm only the radar feature, README section, tests, workflow, and generated watchlist changed.
+Expected: radar-only changes.
 
-- [ ] **Step 8: Check working tree cleanliness**
+- [ ] **Step 8: Working tree clean**
 
 ```bash
 git status --short
@@ -1121,16 +842,16 @@ git status --short
 
 Expected: empty.
 
-- [ ] **Step 9: Request code review before merge**
+- [ ] **Step 9: Adversarial review before merge**
 
-Run the repository's normal adversarial review process on the final diff. Specifically challenge:
+Challenge at minimum:
 
-- token leakage across repository boundaries;
-- fail-open behavior on GitHub Search API errors;
-- `NEW` baseline semantics;
-- force-with-lease behavior on the persistent automation branch;
-- duplicate PR creation races;
+- unauthenticated Search API rate-limit/failure handling;
 - Markdown injection/table corruption;
-- workflow permission scope.
+- persistent-branch `--force-with-lease` behavior;
+- duplicate PR races despite concurrency;
+- workflow token scope;
+- any hidden path that could mutate `cases/AFF-*`;
+- whether identical metadata really produces identical output.
 
-Do not merge until review findings are resolved and Tasks 1–6 remain green.
+Resolve findings, rerun Steps 1–8, then open the implementation PR for human review.
