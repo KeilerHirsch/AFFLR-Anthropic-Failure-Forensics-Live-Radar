@@ -98,10 +98,10 @@ The marker is purely a change indicator, not a quality signal.
 
 GitHub Actions runs the radar on:
 
-- a scheduled cadence twice per day;
+- an hourly scheduled cadence;
 - `workflow_dispatch` for manual runs.
 
-The implementation should use non-round cron minutes to reduce scheduled-run congestion; the implementation plan may choose the exact minute while preserving the twice-daily cadence.
+Use a non-round cron minute to reduce scheduled-run congestion while preserving one run per hour.
 
 Data flow:
 
@@ -226,6 +226,7 @@ The implementation is acceptable only when tests demonstrate all of the followin
 14. Output is deterministic for identical input.
 15. No workflow path creates or edits `AFF-###` case content automatically.
 16. README describes the radar as discovery metadata and links the generated watchlist.
+17. Scheduled workflow cadence is exactly once per hour and uses a non-round cron minute.
 
 ## Non-goals
 
