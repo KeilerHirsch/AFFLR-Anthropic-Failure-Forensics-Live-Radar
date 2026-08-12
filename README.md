@@ -43,7 +43,7 @@ Cases use a deliberately small evidence ladder:
 
 | Level | Meaning |
 |---|---|
-| **L0** | Hypothesis only |
+| **L0** | Hypothesis only — e.g. [VCST — VibeCoderSlopTourette hypothesis/context](https://github.com/anthropics/claude-code/issues/83510#issuecomment-5176435504) |
 | **L1** | Artifact or behavior observed |
 | **L2** | Relevant AI / Anthropic provenance established |
 | **L3** | Execution or occurrence established |
