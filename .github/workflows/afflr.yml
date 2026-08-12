@@ -1,0 +1,114 @@
+name: AFFLR — Anthropic Failure Forensics Live Radar
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: afflr-live-radar
+  cancel-in-progress: false
+
+jobs:
+  update-radar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Render AFFLR snapshot
+        run: python3 scripts/afflr.py --output /tmp/afflr-candidates.md
+
+      - name: Inspect diff and existing radar PR
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/afflr
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -f watchlist/candidates.md ] && cmp -s watchlist/candidates.md /tmp/afflr-candidates.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          mapfile -t prs < <(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --base main \
+              --head "$BRANCH" \
+              --json number \
+              --jq '.[].number'
+          )
+
+          if [ "${#prs[@]}" -gt 1 ]; then
+            echo "AFFLR invariant violated: more than one open radar PR" >&2
+            exit 1
+          fi
+
+          if [ "${#prs[@]}" -eq 1 ]; then
+            echo "pr_number=${prs[0]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Close stale radar PR when main already matches
+        if: steps.state.outputs.changed == 'false' && steps.state.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr close "${{ steps.state.outputs.pr_number }}" --repo "$GITHUB_REPOSITORY"
+
+      - name: Update persistent AFFLR branch
+        if: steps.state.outputs.changed == 'true'
+        env:
+          BRANCH: automation/afflr
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          remote_sha=""
+          if remote_line="$(git ls-remote --exit-code --heads origin "refs/heads/${BRANCH}")"; then
+            remote_sha="${remote_line%%[[:space:]]*}"
+          fi
+
+          git checkout -B "$BRANCH" origin/main
+          mkdir -p watchlist
+          cp /tmp/afflr-candidates.md watchlist/candidates.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add watchlist/candidates.md
+          git commit -m "chore: update AFFLR snapshot"
+
+          if [ -n "$remote_sha" ]; then
+            git push \
+              --force-with-lease="refs/heads/${BRANCH}:${remote_sha}" \
+              origin "HEAD:refs/heads/${BRANCH}"
+          else
+            git push origin "HEAD:refs/heads/${BRANCH}"
+          fi
+
+      - name: Create AFFLR review PR if none is open
+        if: steps.state.outputs.changed == 'true' && steps.state.outputs.pr_number == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/afflr
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: update AFFLR live radar" \
+            --body "Automated hourly AFFLR refresh of objective public GitHub issue metadata. Radar inclusion is discovery only and does not imply AFF acceptance, evidence level, or causal attribution."
