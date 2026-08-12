@@ -4,7 +4,7 @@ Date: 2026-08-12
 
 ## Purpose
 
-Add a lightweight automated discovery layer to `anthropic-failure-forensics` that scans all issues in `anthropics/claude-code`, including open and closed issues, and produces a reviewable candidate list without making forensic judgments or creating AFF cases automatically.
+Add a lightweight automated discovery layer to `anthropic-failure-forensics` that searches the full `anthropics/claude-code` issue corpus, including open and closed issues, and produces a reviewable candidate list without making forensic judgments or creating AFF cases automatically.
 
 The radar is discovery metadata only. It must not convert popularity, labels, or activity into evidence levels, causal attribution, or AFF approval.
 
@@ -16,16 +16,30 @@ The radar is discovery metadata only. It must not convert popularity, labels, or
 
 ## Scope
 
-The radar monitors all issues in `anthropics/claude-code`:
+The radar search scope is all issues in `anthropics/claude-code`:
 
 - open issues;
 - closed issues;
 - closed/not-planned issues;
 - duplicates and other closed lifecycle states when exposed by GitHub metadata.
 
-Pull requests returned by issue-list endpoints must be excluded explicitly.
+The implementation uses GitHub's public issue search with `repo:anthropics/claude-code is:issue`, so pull requests are excluded by the search qualifier instead of being treated as candidates.
 
 No external AI or LLM is used for discovery, ranking, summarization, or classification.
+
+## Retrieval strategy
+
+The upstream corpus is too large for an hourly full REST crawl. The radar therefore asks GitHub to rank the entire issue corpus and retrieves only the rows needed for the three views.
+
+Each run performs exactly three upstream public search requests:
+
+1. `repo:anthropics/claude-code is:issue sort:reactions-desc` with `per_page=25`;
+2. `repo:anthropics/claude-code is:issue sort:comments-desc` with `per_page=25`;
+3. `repo:anthropics/claude-code is:issue sort:updated-desc` with `per_page=25`.
+
+The upstream search requests are intentionally unauthenticated so the repository-scoped `GITHUB_TOKEN` is never sent to another repository. Each response must report `incomplete_results: false`; otherwise the run fails closed.
+
+The workflow token is used only for operations inside `KeilerHirsch/anthropic-failure-forensics`.
 
 ## Output
 
@@ -42,45 +56,35 @@ Each issue row contains only observable GitHub metadata:
 - author;
 - state/state reason when available;
 - total reactions;
+- reaction breakdown when present in the search response;
 - comments;
 - updated date;
 - created date;
 - labels.
 
-If the API exposes reliable per-reaction counts in the implementation path, the renderer may additionally display reaction types such as `👍`, `❤️`, or `🚀`; the total reaction count remains the required field.
-
 ## Rankings
 
 There is no AFF score, forensic score, AI score, HOT/STRONG/WATCH classification, or inferred quality score.
 
-The document contains three objective views, each limited to the top 25 issues:
+The document contains three objective views, each limited to the top 25 issues returned by GitHub's corpus-wide sort.
 
 ### Most reacted
 
-Sort keys, in order:
+Source query: `sort:reactions-desc`.
 
-1. reactions descending;
-2. comments descending;
-3. `updated_at` descending;
-4. issue number descending as deterministic final tie-breaker.
+Display order follows GitHub's returned order. Local deterministic tie-breaking is applied only if fixture/test data contains equal upstream rank inputs: comments descending, `updated_at` descending, then issue number descending.
 
 ### Most discussed
 
-Sort keys, in order:
+Source query: `sort:comments-desc`.
 
-1. comments descending;
-2. reactions descending;
-3. `updated_at` descending;
-4. issue number descending.
+Display order follows GitHub's returned order. Local deterministic tie-breaking for equal fixture/test inputs: reactions descending, `updated_at` descending, then issue number descending.
 
 ### Recently active
 
-Sort keys, in order:
+Source query: `sort:updated-desc`.
 
-1. `updated_at` descending;
-2. reactions descending;
-3. comments descending;
-4. issue number descending.
+Display order follows GitHub's returned order. Local deterministic tie-breaking for equal fixture/test inputs: reactions descending, comments descending, then issue number descending.
 
 Open and closed issues are ranked together. Lifecycle state is displayed, not used as a hidden popularity penalty.
 
@@ -101,20 +105,18 @@ GitHub Actions runs the radar on:
 - an hourly scheduled cadence;
 - `workflow_dispatch` for manual runs.
 
-Use a non-round cron minute to reduce scheduled-run congestion while preserving one run per hour.
+Use a non-round cron minute while preserving one run per hour.
 
 Data flow:
 
 ```text
-anthropics/claude-code issues
+GitHub Search over full anthropics/claude-code issue corpus
         ↓
-collector
+3 objective sorted queries × 25 rows
         ↓
-exclude pull requests
+validate complete responses
         ↓
 normalize observable metadata
-        ↓
-three deterministic rankings
         ↓
 render watchlist/candidates.md
         ↓
@@ -136,11 +138,11 @@ Use at most one open radar PR against `main`, with a stable title such as:
 
 Each workflow run:
 
-1. fetches the current upstream issue data;
-2. renders the new candidate file;
-3. compares it with the current generated file;
+1. starts from the current `main` baseline;
+2. fetches the three upstream search views;
+3. renders the new candidate file;
 4. exits without a commit if there is no content change;
-5. updates the persistent automation branch if content changed;
+5. resets/updates the persistent automation branch from current `main` plus the generated change;
 6. creates the radar PR if none is open, otherwise updates the existing PR through the branch.
 
 The workflow must not create a fresh PR on every scheduled run.
@@ -156,8 +158,8 @@ The root `README.md` must receive a small, non-promotional section explaining th
 It should state that:
 
 - the repository has an automated Claude issue radar;
-- the radar scans open and closed `anthropics/claude-code` issues;
-- it sorts candidates by reactions, discussion, and recent activity;
+- the radar searches open and closed `anthropics/claude-code` issues;
+- it exposes top views by reactions, discussion, and recent activity;
 - radar entries are discovery metadata only;
 - AFF inclusion still requires manual evidence review.
 
@@ -167,9 +169,11 @@ This README change must preserve the existing `Evidence before attribution` fram
 
 ## Permissions and security
 
-No repository or third-party secret is required beyond GitHub's workflow token.
+No personal access token, GitHub App credential, or third-party secret is required.
 
-Use explicit least-privilege workflow permissions. The expected maximum permissions are:
+The upstream search is public and unauthenticated. `GITHUB_TOKEN` is used only inside the workflow repository.
+
+Use explicit least-privilege workflow permissions:
 
 ```yaml
 permissions:
@@ -177,56 +181,54 @@ permissions:
   pull-requests: write
 ```
 
-If implementation can reduce either permission further while retaining the persistent-branch PR model, prefer the narrower permission set.
-
-No external executable downloads, AI services, analytics endpoints, or telemetry are required.
+No external AI services, analytics endpoints, telemetry, or third-party actions are required. A GitHub-maintained checkout action is acceptable for repository checkout.
 
 ## Failure behavior
 
 The workflow must fail closed.
 
-If collection, pagination, API parsing, normalization, or rendering fails:
+If an upstream HTTP request, rate limit, JSON parse, required field validation, `incomplete_results` check, normalization, rendering, git operation, or PR operation fails:
 
-- do not overwrite the existing watchlist;
+- do not replace the existing watchlist on `main`;
 - do not commit a partial result;
 - do not report success;
 - leave the last known-good generated output untouched.
 
-Rate-limit errors and incomplete pagination are failures, not successful partial scans.
-
 ## Determinism
 
-Given identical GitHub metadata, the renderer must produce byte-stable output.
+Given identical search responses and identical `main` baseline, the renderer must produce byte-stable output.
 
 Requirements:
 
-- deterministic tie-breakers;
+- deterministic local tie-breakers;
 - stable label ordering;
 - stable date formatting;
 - Markdown escaping for titles/authors/labels where required;
-- no generated timestamps that cause meaningless diffs unless they represent actual source data.
+- no generated timestamps that cause meaningless diffs.
 
 ## Tests and acceptance criteria
 
 The implementation is acceptable only when tests demonstrate all of the following:
 
-1. Pull requests returned by issue endpoints are excluded.
-2. Open and closed issues are both included.
-3. Closed/not-planned or duplicate states are preserved when available.
-4. Reaction ranking uses the documented tie-breakers.
-5. Comment ranking uses the documented tie-breakers.
-6. Recent-activity ranking uses the documented tie-breakers.
-7. The top-25 limit is applied independently per view.
+1. Search scope uses `repo:anthropics/claude-code is:issue` for all three views.
+2. Open and closed issues are both preserved from search results.
+3. Closed/not-planned or duplicate state reasons are preserved when available.
+4. Most-reacted uses the reactions-sorted upstream query.
+5. Most-discussed uses the comments-sorted upstream query.
+6. Recently-active uses the updated-sorted upstream query.
+7. Exactly 25 results are requested independently per view.
 8. `NEW` is calculated independently per view against the `main` baseline.
 9. An issue may appear in multiple views.
 10. Markdown-special characters in upstream metadata cannot corrupt the table.
-11. Pagination handles repositories with more than one API page of issues.
-12. An unchanged render produces no content commit.
-13. API/rate-limit/parsing failure cannot replace the last known-good watchlist.
-14. Output is deterministic for identical input.
+11. A response with `incomplete_results: true` fails without producing replacement output.
+12. HTTP/rate-limit/JSON/required-field failure cannot replace the last known-good watchlist.
+13. An unchanged render produces no content commit.
+14. Output is deterministic for identical input and baseline.
 15. No workflow path creates or edits `AFF-###` case content automatically.
 16. README describes the radar as discovery metadata and links the generated watchlist.
 17. Scheduled workflow cadence is exactly once per hour and uses a non-round cron minute.
+18. No personal token or third-party secret is required.
+19. The workflow never sends `GITHUB_TOKEN` to the upstream search endpoint.
 
 ## Non-goals
 
@@ -240,6 +242,7 @@ This feature does not:
 - auto-comment upstream;
 - auto-create AFF cases;
 - monitor Reddit or other external platforms;
+- maintain a local mirror of the full Claude issue corpus;
 - create a database, dashboard, or generated site.
 
 ## Expected repository additions
