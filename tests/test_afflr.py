@@ -33,7 +33,9 @@ class IssueFixtureMixin:
         }
         raw.update(overrides)
         if "number" in overrides and "html_url" not in overrides:
-            raw["html_url"] = f"https://github.com/anthropics/claude-code/issues/{raw['number']}"
+            raw["html_url"] = (
+                f"https://github.com/anthropics/claude-code/issues/{raw['number']}"
+            )
         return raw
 
 
@@ -124,9 +126,7 @@ class OrderingAndQueryTests(IssueFixtureMixin, unittest.TestCase):
 
 class RenderingTests(IssueFixtureMixin, unittest.TestCase):
     def test_render_contains_required_metadata_and_escapes_table_text(self):
-        issue = afflr.normalize_issue(
-            self.sample_issue(title="bad | title <script>")
-        )
+        issue = afflr.normalize_issue(self.sample_issue(title="bad | title <script>"))
         views = {
             name: [issue]
             for name in ("most-reacted", "most-discussed", "recently-active")
@@ -171,6 +171,66 @@ class RenderingTests(IssueFixtureMixin, unittest.TestCase):
         }
         self.assertEqual(afflr.render_markdown(views), afflr.render_markdown(views))
 
+    def test_readme_fragment_shows_top_five_and_collapses_rest(self):
+        issues = [
+            afflr.normalize_issue(self.sample_issue(number=number))
+            for number in range(1, 26)
+        ]
+        views = {name: issues for name in afflr.VIEW_ORDER}
+
+        text = afflr.render_readme_fragment(views)
+
+        self.assertEqual(text.count("<details>"), 3)
+        self.assertEqual(text.count("<summary>Show remaining 20</summary>"), 3)
+        for number in range(1, 26):
+            self.assertIn(f"[#{number}]", text)
+        for title in ("🔥 Most reacted", "💬 Most discussed", "🆕 Recently active"):
+            self.assertIn(title, text)
+
+    def test_readme_fragment_escapes_untrusted_text(self):
+        issue = afflr.normalize_issue(
+            self.sample_issue(title="[click](https://evil.example) | <script>")
+        )
+        views = {name: [issue] for name in afflr.VIEW_ORDER}
+        text = afflr.render_readme_fragment(views)
+        self.assertIn(
+            r"\[click\](https://evil.example) \| &lt;script&gt;",
+            text,
+        )
+        self.assertNotIn("<script>", text)
+
+    def test_inject_readme_fragment_preserves_outside_content(self):
+        original = (
+            "before\n"
+            "<!-- AFFLR-RADAR:START -->\n"
+            "old\n"
+            "<!-- AFFLR-RADAR:END -->\n"
+            "after\n"
+        )
+        updated = afflr.inject_readme_fragment(original, "new\n")
+        self.assertEqual(
+            updated,
+            "before\n"
+            "<!-- AFFLR-RADAR:START -->\n"
+            "new\n"
+            "<!-- AFFLR-RADAR:END -->\n"
+            "after\n",
+        )
+
+    def test_inject_readme_fragment_rejects_bad_markers(self):
+        invalid = [
+            "no markers\n",
+            "<!-- AFFLR-RADAR:START -->\nonly start\n",
+            "<!-- AFFLR-RADAR:END -->\n<!-- AFFLR-RADAR:START -->\n",
+            "<!-- AFFLR-RADAR:START -->\na\n"
+            "<!-- AFFLR-RADAR:START -->\nb\n"
+            "<!-- AFFLR-RADAR:END -->\n",
+        ]
+        for text in invalid:
+            with self.subTest(text=text):
+                with self.assertRaises(afflr.RadarError):
+                    afflr.inject_readme_fragment(text, "new\n")
+
 
 class HttpAndCliTests(unittest.TestCase):
     class DummyResponse:
@@ -190,7 +250,9 @@ class HttpAndCliTests(unittest.TestCase):
         seen = {}
 
         def opener(request, timeout=0):
-            seen["headers"] = {key.lower(): value for key, value in request.header_items()}
+            seen["headers"] = {
+                key.lower(): value for key, value in request.header_items()
+            }
             return self.DummyResponse(
                 b'{"incomplete_results": false, "items": []}'
             )
@@ -223,6 +285,43 @@ class HttpAndCliTests(unittest.TestCase):
                 output.read_text(encoding="utf-8"), "last known good\n"
             )
 
+    def test_dual_output_failure_preserves_readme_and_watchlist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "radar.md"
+            readme = Path(tmp) / "README.md"
+            output.write_text("last known good\n", encoding="utf-8")
+            readme.write_text(
+                "before\n"
+                "<!-- AFFLR-RADAR:START -->\n"
+                "old\n"
+                "<!-- AFFLR-RADAR:END -->\n"
+                "after\n",
+                encoding="utf-8",
+            )
+            before_output = output.read_bytes()
+            before_readme = readme.read_bytes()
+
+            with patch.object(
+                afflr, "collect_live_views", side_effect=afflr.RadarError("boom")
+            ):
+                with self.assertRaises(afflr.RadarError):
+                    afflr.main(
+                        ["--output", str(output), "--readme", str(readme)]
+                    )
+
+            self.assertEqual(output.read_bytes(), before_output)
+            self.assertEqual(readme.read_bytes(), before_readme)
+
+
+class ReadmeContractTests(unittest.TestCase):
+    def test_readme_has_single_generated_region_and_direct_live_copy(self):
+        text = Path("README.md").read_text(encoding="utf-8")
+        self.assertEqual(text.count("<!-- AFFLR-RADAR:START -->"), 1)
+        self.assertEqual(text.count("<!-- AFFLR-RADAR:END -->"), 1)
+        self.assertIn("Evidence before attribution.", text)
+        self.assertNotIn("review PR", text)
+        self.assertIn("Top 5", text)
+
 
 class WorkflowContractTests(unittest.TestCase):
     def test_workflow_contract(self):
@@ -231,13 +330,20 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("cron: '17 * * * *'", text)
         self.assertIn("workflow_dispatch:", text)
         self.assertIn("contents: write", text)
-        self.assertIn("pull-requests: write", text)
-        self.assertIn("automation/afflr", text)
+        self.assertNotIn("pull-requests: write", text)
+        self.assertNotIn("automation/afflr", text)
+        self.assertNotIn("gh pr", text)
+        self.assertNotIn("--force-with-lease", text)
+        self.assertNotIn("git push --force", text)
+        self.assertIn("README.md", text)
+        self.assertIn("watchlist/candidates.md", text)
+        self.assertIn("git diff --quiet", text)
+        self.assertIn("git push origin HEAD:main", text)
+        self.assertIn("git fetch origin main", text)
+        self.assertIn("remote main moved during AFFLR run", text)
         self.assertIn("3d3c42e5aac5ba805825da76410c181273ba90b1", text)
         self.assertNotIn("secrets.PAT", text)
         self.assertNotIn("cases/AFF-", text)
-        self.assertIn("gh pr close", text)
-        self.assertIn("--force-with-lease", text)
 
 
 if __name__ == "__main__":
