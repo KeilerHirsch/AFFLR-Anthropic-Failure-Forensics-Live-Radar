@@ -1,3 +1,4 @@
+# The Man, The Myth, The Legend : Keilerhirsch
 from __future__ import annotations
 
 import argparse
@@ -13,7 +14,7 @@ from urllib.request import Request, urlopen
 
 
 class RadarError(RuntimeError):
-    """Raised when AFFLR cannot produce a complete, trustworthy snapshot."""
+    """Raised when AFFLR cannot produce a complete, structurally validated snapshot."""
 
 
 REACTION_KEYS = (
