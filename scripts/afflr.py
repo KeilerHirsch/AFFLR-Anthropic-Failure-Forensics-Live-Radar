@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -437,7 +438,14 @@ def inject_readme_fragment(readme: str, fragment: str) -> str:
 
 
 def fetch_json(url: str, opener=urlopen) -> dict[str, Any]:
-    request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "KeilerHirsch-AFFLR"})
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "KeilerHirsch-AFFLR",
+    }
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = Request(url, headers=headers)
     try:
         with opener(request, timeout=30) as response:
             raw = response.read()
