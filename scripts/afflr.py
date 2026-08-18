@@ -491,7 +491,7 @@ def render_markdown(
         "# AFFLR — Anthropic Failure Forensics Live Radar",
         "",
         "> Automated discovery metadata from public `anthropics/claude-code` issues. "
-        "Inclusion here is **not** AFF acceptance, an evidence level, a vulnerability rating, "
+        "Inclusion here is **not** AFF acceptance, **not an AFF evidence level**, a vulnerability rating, "
         "or causal attribution.",
         "",
         "Primary ordering is a transparent heuristic for discovery: issue text/labels, "
