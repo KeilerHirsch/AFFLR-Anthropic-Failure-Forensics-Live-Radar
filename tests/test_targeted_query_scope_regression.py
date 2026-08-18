@@ -5,16 +5,16 @@ from scripts import afflr
 
 
 class TargetedQueryScopeRegressionTests(unittest.TestCase):
-    def test_each_or_arm_repeats_repo_and_issue_scope(self):
+    def test_targeted_or_query_is_grouped_inside_repo_scope(self):
         for query in afflr.TARGETED_SEARCH_QUERIES:
             url = afflr.build_search_url(per_page=100, query=query)
             q = parse_qs(urlparse(url).query)["q"][0]
-            expected_arms = query.count(" OR ") + 1
-            self.assertEqual(
-                q.count(afflr.SEARCH_SCOPE),
-                expected_arms,
-                msg=f"targeted OR query leaked search scope: {q}",
+            self.assertEqual(q.count(afflr.SEARCH_SCOPE), 1)
+            self.assertTrue(
+                q.startswith(f"{afflr.SEARCH_SCOPE} ("),
+                msg=f"targeted query is not grouped under repo scope: {q}",
             )
+            self.assertTrue(q.endswith(")"), msg=f"targeted query is not closed: {q}")
 
 
 if __name__ == "__main__":
