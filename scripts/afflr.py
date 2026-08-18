@@ -37,37 +37,111 @@ REACTION_EMOJI = {
     "rocket": "🚀",
     "eyes": "👀",
 }
-VIEW_SORT = {
+
+SECONDARY_VIEW_SORT = {
     "most-reacted": "reactions",
     "most-discussed": "comments",
     "recently-active": "updated",
 }
-VIEW_TITLES = {
+SECONDARY_VIEW_TITLES = {
     "most-reacted": "Most reacted",
     "most-discussed": "Most discussed",
     "recently-active": "Recently active",
 }
-README_VIEW_TITLES = {
-    "most-reacted": "🔥 Most reacted",
-    "most-discussed": "💬 Most discussed",
-    "recently-active": "🆕 Recently active",
+SECONDARY_VIEW_ORDER = ("most-reacted", "most-discussed", "recently-active")
+
+PRIMARY_VIEW_TITLES = {
+    "security-trust": "🛡️ Security & trust-boundary signals",
+    "evidence-integrity": "🔬 Evidence / provenance / integrity signals",
+    "fresh-critical": "🚨 Fresh critical signals",
 }
-VIEW_ORDER = ("most-reacted", "most-discussed", "recently-active")
+PRIMARY_VIEW_ORDER = ("security-trust", "evidence-integrity", "fresh-critical")
+
+# Known high-value context links that should stay discoverable even if they are
+# no longer among GitHub's most recently updated issues. Inclusion is discovery
+# metadata only; it is not an AFF evidence level or causal attribution.
+RELATED_CONTEXT_NUMBERS = (83510, 83795, 86979, 87086)
+
 SEARCH_ENDPOINT = "https://api.github.com/search/issues"
+ISSUE_ENDPOINT = "https://api.github.com/repos/anthropics/claude-code/issues"
 SEARCH_SCOPE = "repo:anthropics/claude-code is:issue"
 EXPECTED_ISSUE_PREFIX = "https://github.com/anthropics/claude-code/issues/"
 TABLE_HEADER = (
     "| Issue | Title | Author | State | Reactions | Comments | Updated | Created | Labels |"
 )
 TABLE_RULE = "|---:|---|---|---|---:|---:|---|---|---|"
+PRIMARY_TABLE_HEADER = (
+    "| Issue | Title | State | Signal | Updated | Created | Labels |"
+)
+PRIMARY_TABLE_RULE = "|---:|---|---|---|---|---|---|"
 README_START = "<!-- AFFLR-RADAR:START -->"
 README_END = "<!-- AFFLR-RADAR:END -->"
+
+SECURITY_TERMS = (
+    "security",
+    "credential",
+    "credentials",
+    "token",
+    "secret",
+    "permission",
+    "permissions",
+    "sandbox",
+    "injection",
+    "exfil",
+    "unauthor",
+    "authentication",
+    "authorization",
+    "auth",
+    "session",
+    "data loss",
+    "delete",
+    "deletion",
+    "destructive",
+    "rce",
+    "path traversal",
+    "privacy",
+)
+INTEGRITY_TERMS = (
+    "fabricat",
+    "phantom",
+    "hallucin",
+    "monitor",
+    "notification",
+    "event",
+    "provenance",
+    "integrity",
+    "routing",
+    "rerout",
+    "fallback",
+    "pinning",
+    "model switch",
+    "model selector",
+    "sticky model",
+    "eval",
+    "benchmark",
+    "telemetry",
+    "classifier",
+    "safeguard",
+    "false positive",
+    "reasoning extraction",
+    "observation",
+)
+HIGH_SIGNAL_LABELS = {
+    "has repro",
+    "security",
+    "area:auth",
+    "area:tools",
+    "area:model",
+    "area:api",
+    "oncall",
+}
 
 
 @dataclass(frozen=True)
 class IssueRecord:
     number: int
     title: str
+    body: str
     url: str
     author: str
     state: str
@@ -132,6 +206,7 @@ def normalize_issue(raw: dict[str, Any]) -> IssueRecord:
     title = _need(raw, "title")
     url = _need(raw, "html_url")
     state = _need(raw, "state")
+    body = raw.get("body") or ""
 
     if not isinstance(number, int) or not isinstance(comments, int):
         raise RadarError("invalid numeric issue metadata")
@@ -139,6 +214,8 @@ def normalize_issue(raw: dict[str, Any]) -> IssueRecord:
         raise RadarError("out-of-range numeric issue metadata")
     if not isinstance(title, str) or not isinstance(url, str) or not isinstance(state, str):
         raise RadarError("invalid string issue metadata")
+    if not isinstance(body, str):
+        raise RadarError("invalid issue body")
     if state not in {"open", "closed"}:
         raise RadarError(f"invalid issue state: {state!r}")
 
@@ -153,6 +230,7 @@ def normalize_issue(raw: dict[str, Any]) -> IssueRecord:
     return IssueRecord(
         number=number,
         title=title,
+        body=body,
         url=url,
         author=user["login"],
         state=state,
@@ -179,68 +257,152 @@ def _ts(value: str) -> float:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
 
 
-def sort_view(view_name: str, issues: list[IssueRecord]) -> list[IssueRecord]:
+def _issue_text(issue: IssueRecord) -> str:
+    return " ".join((issue.title, issue.body, *issue.labels)).casefold()
+
+
+def _matches_any(issue: IssueRecord, terms: tuple[str, ...]) -> int:
+    text = _issue_text(issue)
+    return sum(1 for term in terms if term in text)
+
+
+def classify_signals(issue: IssueRecord) -> tuple[str, ...]:
+    signals: list[str] = []
+    security_hits = _matches_any(issue, SECURITY_TERMS)
+    integrity_hits = _matches_any(issue, INTEGRITY_TERMS)
+
+    if security_hits:
+        signals.append("security / trust boundary")
+    if integrity_hits:
+        signals.append("observation / provenance integrity")
+
+    labels = {label.casefold() for label in issue.labels}
+    if labels & HIGH_SIGNAL_LABELS:
+        signals.append("high-signal label")
+    if issue.number in RELATED_CONTEXT_NUMBERS:
+        signals.append("related context")
+
+    return tuple(signals)
+
+
+def discovery_priority(issue: IssueRecord) -> tuple[int, int, int, float, int]:
+    """Transparent discovery ordering; not a vulnerability or evidence score."""
+    security_hits = _matches_any(issue, SECURITY_TERMS)
+    integrity_hits = _matches_any(issue, INTEGRITY_TERMS)
+    labels = {label.casefold() for label in issue.labels}
+    high_signal_label = int(bool(labels & HIGH_SIGNAL_LABELS))
+    related = int(issue.number in RELATED_CONTEXT_NUMBERS)
+    return (
+        min(security_hits + integrity_hits, 8),
+        high_signal_label,
+        related,
+        _ts(issue.updated_at),
+        issue.number,
+    )
+
+
+def sort_secondary_view(view_name: str, issues: list[IssueRecord]) -> list[IssueRecord]:
     if view_name == "most-reacted":
-        return sorted(
-            issues,
-            key=lambda issue: (
-                issue.reactions_total,
-                issue.comments,
-                _ts(issue.updated_at),
-                issue.number,
-            ),
-            reverse=True,
+        key = lambda issue: (
+            issue.reactions_total,
+            issue.comments,
+            _ts(issue.updated_at),
+            issue.number,
         )
-    if view_name == "most-discussed":
-        return sorted(
-            issues,
-            key=lambda issue: (
-                issue.comments,
-                issue.reactions_total,
-                _ts(issue.updated_at),
-                issue.number,
-            ),
-            reverse=True,
+    elif view_name == "most-discussed":
+        key = lambda issue: (
+            issue.comments,
+            issue.reactions_total,
+            _ts(issue.updated_at),
+            issue.number,
         )
-    if view_name == "recently-active":
-        return sorted(
-            issues,
-            key=lambda issue: (
-                _ts(issue.updated_at),
-                issue.reactions_total,
-                issue.comments,
-                issue.number,
-            ),
-            reverse=True,
+    elif view_name == "recently-active":
+        key = lambda issue: (
+            _ts(issue.updated_at),
+            issue.reactions_total,
+            issue.comments,
+            issue.number,
         )
-    raise RadarError(f"unknown view: {view_name}")
+    else:
+        raise RadarError(f"unknown view: {view_name}")
+    return sorted(issues, key=key, reverse=True)
 
 
-def build_search_url(view_name: str) -> str:
-    try:
-        sort_name = VIEW_SORT[view_name]
-    except KeyError as exc:
-        raise RadarError(f"unknown view: {view_name}") from exc
-
+def build_search_url(
+    *,
+    sort_name: str = "updated",
+    per_page: int = 25,
+) -> str:
     params = {
         "q": SEARCH_SCOPE,
         "sort": sort_name,
         "order": "desc",
-        "per_page": 25,
+        "per_page": per_page,
     }
     return f"{SEARCH_ENDPOINT}?{urlencode(params)}"
 
 
-def collect_views(
+def build_issue_url(number: int) -> str:
+    if number <= 0:
+        raise RadarError("invalid issue number")
+    return f"{ISSUE_ENDPOINT}/{number}"
+
+
+def _merge_issues(*groups: list[IssueRecord]) -> list[IssueRecord]:
+    by_number: dict[int, IssueRecord] = {}
+    for group in groups:
+        for issue in group:
+            by_number[issue.number] = issue
+    return list(by_number.values())
+
+
+def collect_secondary_views(
     fetcher: Callable[[str], dict[str, Any]],
 ) -> dict[str, list[IssueRecord]]:
     result: dict[str, list[IssueRecord]] = {}
-    for name in VIEW_ORDER:
-        issues = normalize_search_response(fetcher(build_search_url(name)))
+    for name in SECONDARY_VIEW_ORDER:
+        sort_name = SECONDARY_VIEW_SORT[name]
+        issues = normalize_search_response(fetcher(build_search_url(sort_name=sort_name)))
         if len(issues) > 25:
             raise RadarError(f"too many rows returned for {name}")
-        result[name] = sort_view(name, issues)
+        result[name] = sort_secondary_view(name, issues)
     return result
+
+
+def collect_primary_views(
+    fetcher: Callable[[str], dict[str, Any]],
+) -> dict[str, list[IssueRecord]]:
+    recent = normalize_search_response(
+        fetcher(build_search_url(sort_name="updated", per_page=100))
+    )
+    if len(recent) > 100:
+        raise RadarError("too many rows returned for primary discovery pool")
+
+    pinned: list[IssueRecord] = []
+    for number in RELATED_CONTEXT_NUMBERS:
+        pinned.append(normalize_issue(fetcher(build_issue_url(number))))
+
+    pool = _merge_issues(recent, pinned)
+    security = [issue for issue in pool if _matches_any(issue, SECURITY_TERMS)]
+    integrity = [issue for issue in pool if _matches_any(issue, INTEGRITY_TERMS)]
+
+    critical_numbers = {issue.number for issue in security + integrity}
+    fresh = [issue for issue in recent if issue.number in critical_numbers]
+
+    security.sort(key=discovery_priority, reverse=True)
+    integrity.sort(key=discovery_priority, reverse=True)
+    fresh.sort(
+        key=lambda issue: (
+            _ts(issue.created_at),
+            discovery_priority(issue),
+        ),
+        reverse=True,
+    )
+    return {
+        "security-trust": security[:25],
+        "evidence-integrity": integrity[:25],
+        "fresh-critical": fresh[:25],
+    }
 
 
 def escape_cell(value: str) -> str:
@@ -269,7 +431,12 @@ def reaction_label(issue: IssueRecord) -> str:
     return f"{issue.reactions_total} ({detail})"
 
 
-def render_table_rows(issues: list[IssueRecord]) -> list[str]:
+def signal_label(issue: IssueRecord) -> str:
+    signals = classify_signals(issue)
+    return " · ".join(signals) if signals else "discovery candidate"
+
+
+def render_secondary_table_rows(issues: list[IssueRecord]) -> list[str]:
     rows: list[str] = []
     for issue in issues:
         labels = ", ".join(issue.labels) if issue.labels else "—"
@@ -291,29 +458,81 @@ def render_table_rows(issues: list[IssueRecord]) -> list[str]:
     return rows
 
 
-def render_markdown(views: dict[str, list[IssueRecord]]) -> str:
-    if set(views) != set(VIEW_ORDER):
-        raise RadarError("missing or unexpected radar view")
+def render_primary_table_rows(issues: list[IssueRecord]) -> list[str]:
+    rows: list[str] = []
+    for issue in issues:
+        labels = ", ".join(issue.labels) if issue.labels else "—"
+        rows.append(
+            "| [#{number}]({url}) | {title} | {state} | {signal} | "
+            "{updated} | {created} | {labels} |".format(
+                number=issue.number,
+                url=issue.url,
+                title=escape_cell(issue.title),
+                state=escape_cell(state_label(issue)),
+                signal=escape_cell(signal_label(issue)),
+                updated=issue.updated_at[:10],
+                created=issue.created_at[:10],
+                labels=escape_cell(labels),
+            )
+        )
+    return rows
+
+
+def render_markdown(
+    primary: dict[str, list[IssueRecord]],
+    secondary: dict[str, list[IssueRecord]],
+) -> str:
+    if set(primary) != set(PRIMARY_VIEW_ORDER):
+        raise RadarError("missing or unexpected primary radar view")
+    if set(secondary) != set(SECONDARY_VIEW_ORDER):
+        raise RadarError("missing or unexpected secondary radar view")
 
     lines = [
         "# AFFLR — Anthropic Failure Forensics Live Radar",
         "",
         "> Automated discovery metadata from public `anthropics/claude-code` issues. "
-        "Inclusion here is **not** AFF acceptance, an evidence level, or causal attribution.",
+        "Inclusion here is **not** AFF acceptance, **not an AFF evidence level**, a vulnerability rating, "
+        "or causal attribution.",
         "",
-        "Reactions, comments, labels, and activity are discovery signals only. "
+        "Primary ordering is a transparent heuristic for discovery: issue text/labels, "
+        "known related context, and recency. Reactions and comments remain available below "
+        "as secondary metadata only.",
+        "",
         "The case archive remains manually reviewed under **Evidence before attribution**.",
+        "",
+        "# Primary forensic discovery",
         "",
     ]
 
-    for name in VIEW_ORDER:
+    for name in PRIMARY_VIEW_ORDER:
         lines.extend(
             [
-                f"## {VIEW_TITLES[name]}",
+                f"## {PRIMARY_VIEW_TITLES[name]}",
+                "",
+                PRIMARY_TABLE_HEADER,
+                PRIMARY_TABLE_RULE,
+                *render_primary_table_rows(primary[name][:25]),
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "# Secondary discovery metadata",
+            "",
+            "Popularity and discussion volume can help find clusters, but they do not raise "
+            "an issue's evidence level or forensic priority.",
+            "",
+        ]
+    )
+    for name in SECONDARY_VIEW_ORDER:
+        lines.extend(
+            [
+                f"## {SECONDARY_VIEW_TITLES[name]}",
                 "",
                 TABLE_HEADER,
                 TABLE_RULE,
-                *render_table_rows(views[name][:25]),
+                *render_secondary_table_rows(secondary[name][:25]),
                 "",
             ]
         )
@@ -321,27 +540,32 @@ def render_markdown(views: dict[str, list[IssueRecord]]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_readme_fragment(views: dict[str, list[IssueRecord]]) -> str:
-    if set(views) != set(VIEW_ORDER):
-        raise RadarError("missing or unexpected radar view")
+def render_readme_fragment(primary: dict[str, list[IssueRecord]]) -> str:
+    if set(primary) != set(PRIMARY_VIEW_ORDER):
+        raise RadarError("missing or unexpected primary radar view")
 
     lines = [
         "> Automated discovery metadata from public `anthropics/claude-code` issues. "
-        "Popularity is a discovery signal, not evidence.",
+        "Primary ranking is **discovery-only** — not an AFF evidence level, vulnerability "
+        "rating, or causal attribution.",
+        "",
+        "The live README prioritizes security/trust-boundary and provenance/integrity "
+        "signals. Popularity views remain in [`watchlist/candidates.md`](watchlist/candidates.md) "
+        "as secondary discovery metadata.",
         "",
     ]
 
-    for name in VIEW_ORDER:
-        issues = views[name][:25]
+    for name in PRIMARY_VIEW_ORDER:
+        issues = primary[name][:25]
         visible = issues[:5]
         hidden = issues[5:25]
         lines.extend(
             [
-                f"### {README_VIEW_TITLES[name]}",
+                f"### {PRIMARY_VIEW_TITLES[name]}",
                 "",
-                TABLE_HEADER,
-                TABLE_RULE,
-                *render_table_rows(visible),
+                PRIMARY_TABLE_HEADER,
+                PRIMARY_TABLE_RULE,
+                *render_primary_table_rows(visible),
                 "",
             ]
         )
@@ -351,9 +575,9 @@ def render_readme_fragment(views: dict[str, list[IssueRecord]]) -> str:
                     "<details>",
                     f"<summary>Show remaining {len(hidden)}</summary>",
                     "",
-                    TABLE_HEADER,
-                    TABLE_RULE,
-                    *render_table_rows(hidden),
+                    PRIMARY_TABLE_HEADER,
+                    PRIMARY_TABLE_RULE,
+                    *render_primary_table_rows(hidden),
                     "",
                     "</details>",
                     "",
@@ -385,24 +609,29 @@ def fetch_json(url: str, opener=urlopen) -> dict[str, Any]:
             "User-Agent": "KeilerHirsch-AFFLR",
         },
     )
-    # Deliberately unauthenticated: upstream search is public.
+    # Deliberately unauthenticated: upstream issue/search data are public.
     try:
         with opener(request, timeout=30) as response:
             raw = response.read()
     except (HTTPError, URLError, TimeoutError) as exc:
-        raise RadarError("GitHub search request failed") from exc
+        raise RadarError("GitHub request failed") from exc
 
     try:
         payload = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise RadarError("GitHub search returned invalid JSON") from exc
+        raise RadarError("GitHub returned invalid JSON") from exc
     if not isinstance(payload, dict):
-        raise RadarError("GitHub search returned non-object JSON")
+        raise RadarError("GitHub returned non-object JSON")
     return payload
 
 
-def collect_live_views() -> dict[str, list[IssueRecord]]:
-    return collect_views(fetch_json)
+def collect_live_views() -> tuple[
+    dict[str, list[IssueRecord]],
+    dict[str, list[IssueRecord]],
+]:
+    primary = collect_primary_views(fetch_json)
+    secondary = collect_secondary_views(fetch_json)
+    return primary, secondary
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -414,15 +643,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     # Collect and render everything before touching either destination.
-    views = collect_live_views()
-    rendered_watchlist = render_markdown(views)
+    primary, secondary = collect_live_views()
+    rendered_watchlist = render_markdown(primary, secondary)
 
     readme_path = Path(args.readme) if args.readme else None
     rendered_readme: str | None = None
     if readme_path is not None:
         existing_readme = readme_path.read_text(encoding="utf-8")
         rendered_readme = inject_readme_fragment(
-            existing_readme, render_readme_fragment(views)
+            existing_readme, render_readme_fragment(primary)
         )
 
     output = Path(args.output)
