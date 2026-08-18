@@ -51,12 +51,13 @@ RELATED_CONTEXT_NUMBERS = (83510, 83795, 86979, 87086)
 # grouped by build_search_url() underneath SEARCH_SCOPE so the repo/is:issue
 # qualifiers apply to the whole expression. Results are normalized and
 # deduplicated before ranking; these are discovery queries, not vulnerability
-# classifications.
+# classifications. GitHub accepts at most five boolean operators per search
+# query, so each expression stays within that limit.
 TARGETED_SEARCH_QUERIES = (
     "security OR credential OR permission OR sandbox OR injection OR unauthorized",
-    '"data loss" OR deletion OR destructive OR rewind OR overwrite',
+    '"data loss" OR deletion OR destructive OR rewind OR overwrite OR benchmark',
     "fabricated OR phantom OR monitor OR notification OR provenance OR integrity",
-    "routing OR fallback OR pinning OR safeguard OR classifier OR benchmark OR eval",
+    "routing OR fallback OR pinning OR safeguard OR classifier OR eval",
     "token OR secret OR auth OR session OR privacy OR exfiltration",
 )
 TARGETED_POOL_LIMIT = 100
