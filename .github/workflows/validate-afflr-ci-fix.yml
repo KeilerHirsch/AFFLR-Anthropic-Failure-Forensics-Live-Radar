@@ -16,6 +16,35 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Compile radar
         run: python3 -m py_compile scripts/afflr.py
+      - name: Diagnose targeted search endpoints
+        run: |
+          python3 - <<'PY'
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+          from scripts import afflr
+
+          for index, query in enumerate(afflr.TARGETED_SEARCH_QUERIES, 1):
+              url = afflr.build_search_url(
+                  sort_name="updated",
+                  per_page=afflr.TARGETED_POOL_LIMIT,
+                  query=query,
+              )
+              request = Request(
+                  url,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "User-Agent": "KeilerHirsch-AFFLR-diagnostic",
+                  },
+              )
+              try:
+                  with urlopen(request, timeout=30) as response:
+                      print(f"targeted[{index}] status={response.status}")
+              except HTTPError as exc:
+                  body = exc.read().decode("utf-8", errors="replace")
+                  print(f"targeted[{index}] status={exc.code}")
+                  print(body)
+                  raise
+          PY
       - name: Live radar smoke test
         run: |
           cp README.md /tmp/README.md
