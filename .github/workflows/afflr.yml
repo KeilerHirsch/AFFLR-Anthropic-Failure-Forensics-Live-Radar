@@ -24,6 +24,8 @@ jobs:
 
       - name: Render AFFLR outputs
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           cp README.md /tmp/README.md
