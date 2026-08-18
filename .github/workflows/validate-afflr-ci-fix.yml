@@ -16,3 +16,11 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Compile radar
         run: python3 -m py_compile scripts/afflr.py
+      - name: Live radar smoke test
+        run: |
+          cp README.md /tmp/README.md
+          python3 scripts/afflr.py \
+            --output /tmp/afflr-candidates.md \
+            --readme /tmp/README.md
+          test -s /tmp/afflr-candidates.md
+          grep -q "Primary forensic discovery" /tmp/afflr-candidates.md
