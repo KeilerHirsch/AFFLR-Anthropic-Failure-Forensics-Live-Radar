@@ -47,15 +47,17 @@ PRIMARY_VIEW_ORDER = ("security-trust", "evidence-integrity", "fresh-critical")
 RELATED_CONTEXT_NUMBERS = (83510, 83795, 86979, 87086)
 
 # Targeted pools prevent high-value issues from disappearing merely because the
-# repository produced >100 newer updates. Queries are deliberately broad and
-# overlapping; results are normalized and deduplicated by issue number before
-# ranking. These are discovery queries, not vulnerability classifications.
+# repository produced >100 newer updates. GitHub's legacy issue-search boolean
+# parser does not keep one repo qualifier scoped across every OR arm, so every
+# arm after the first repeats SEARCH_SCOPE explicitly. Results are still
+# normalized and deduplicated before ranking; these are discovery queries, not
+# vulnerability classifications.
 TARGETED_SEARCH_QUERIES = (
-    "security OR credential OR permission OR sandbox OR injection OR unauthorized",
-    '"data loss" OR deletion OR destructive OR rewind OR overwrite',
-    "fabricated OR phantom OR monitor OR notification OR provenance OR integrity",
-    "routing OR fallback OR pinning OR safeguard OR classifier OR benchmark OR eval",
-    "token OR secret OR auth OR session OR privacy OR exfiltration",
+    "security OR repo:anthropics/claude-code is:issue credential OR repo:anthropics/claude-code is:issue permission OR repo:anthropics/claude-code is:issue sandbox OR repo:anthropics/claude-code is:issue injection OR repo:anthropics/claude-code is:issue unauthorized",
+    '"data loss" OR repo:anthropics/claude-code is:issue deletion OR repo:anthropics/claude-code is:issue destructive OR repo:anthropics/claude-code is:issue rewind OR repo:anthropics/claude-code is:issue overwrite',
+    "fabricated OR repo:anthropics/claude-code is:issue phantom OR repo:anthropics/claude-code is:issue monitor OR repo:anthropics/claude-code is:issue notification OR repo:anthropics/claude-code is:issue provenance OR repo:anthropics/claude-code is:issue integrity",
+    "routing OR repo:anthropics/claude-code is:issue fallback OR repo:anthropics/claude-code is:issue pinning OR repo:anthropics/claude-code is:issue safeguard OR repo:anthropics/claude-code is:issue classifier OR repo:anthropics/claude-code is:issue benchmark OR repo:anthropics/claude-code is:issue eval",
+    "token OR repo:anthropics/claude-code is:issue secret OR repo:anthropics/claude-code is:issue auth OR repo:anthropics/claude-code is:issue session OR repo:anthropics/claude-code is:issue privacy OR repo:anthropics/claude-code is:issue exfiltration",
 )
 TARGETED_POOL_LIMIT = 100
 RECENT_POOL_LIMIT = 100
