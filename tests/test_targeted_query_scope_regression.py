@@ -16,6 +16,14 @@ class TargetedQueryScopeRegressionTests(unittest.TestCase):
             )
             self.assertTrue(q.endswith(")"), msg=f"targeted query is not closed: {q}")
 
+    def test_targeted_queries_stay_within_github_boolean_operator_limit(self):
+        for query in afflr.TARGETED_SEARCH_QUERIES:
+            self.assertLessEqual(
+                query.count(" OR "),
+                5,
+                msg=f"GitHub rejects targeted query with >5 boolean operators: {query}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
