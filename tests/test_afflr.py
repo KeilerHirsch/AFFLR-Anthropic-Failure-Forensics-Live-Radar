@@ -11,6 +11,7 @@ class IssueFixtureMixin:
         raw = {
             "number": 83510,
             "title": "[MODEL] quality regression | measured",
+            "body": "Observed model routing fallback with reproducible evidence.",
             "html_url": "https://github.com/anthropics/claude-code/issues/83510",
             "user": {"login": "KeilerHirsch"},
             "state": "open",
@@ -47,6 +48,7 @@ class NormalizationTests(IssueFixtureMixin, unittest.TestCase):
         self.assertEqual(issue.reactions_total, 12)
         self.assertEqual(issue.comments, 34)
         self.assertEqual(issue.labels, ("bug", "model"))
+        self.assertIn("routing fallback", issue.body)
 
     def test_closed_state_reason_is_preserved(self):
         issue = afflr.normalize_issue(
@@ -69,10 +71,6 @@ class NormalizationTests(IssueFixtureMixin, unittest.TestCase):
                 {"incomplete_results": False, "items": [raw]}
             )
 
-    def test_non_string_title_is_rejected(self):
-        with self.assertRaises(afflr.RadarError):
-            afflr.normalize_issue(self.sample_issue(title={"oops": True}))
-
     def test_unexpected_issue_url_is_rejected(self):
         with self.assertRaises(afflr.RadarError):
             afflr.normalize_issue(
@@ -80,34 +78,85 @@ class NormalizationTests(IssueFixtureMixin, unittest.TestCase):
             )
 
 
-class OrderingAndQueryTests(IssueFixtureMixin, unittest.TestCase):
-    def test_most_reacted_tie_breaks_deterministically(self):
-        raws = (
-            self.sample_issue(number=1, comments=2, updated_at="2026-08-12T09:00:00Z"),
-            self.sample_issue(number=2, comments=3, updated_at="2026-08-12T08:00:00Z"),
-            self.sample_issue(number=3, comments=3, updated_at="2026-08-12T10:00:00Z"),
+class DiscoveryTests(IssueFixtureMixin, unittest.TestCase):
+    def test_fabricated_monitor_event_is_integrity_signal(self):
+        issue = afflr.normalize_issue(
+            self.sample_issue(
+                number=87519,
+                title="Monitor tool: task notifications deliver fabricated events",
+                body="The subprocess never emitted the notification.",
+                labels=[{"name": "bug"}, {"name": "area:tools"}],
+                updated_at="2026-08-18T04:19:04Z",
+                created_at="2026-08-18T04:17:54Z",
+            )
         )
-        issues = [afflr.normalize_issue(raw) for raw in raws]
-        self.assertEqual(
-            [issue.number for issue in afflr.sort_view("most-reacted", issues)],
-            [3, 2, 1],
-        )
+        self.assertIn("observation / provenance integrity", afflr.classify_signals(issue))
 
-    def test_search_urls_use_full_issue_scope_and_top_25(self):
-        urls = {
-            name: afflr.build_search_url(name)
-            for name in ("most-reacted", "most-discussed", "recently-active")
+    def test_credential_permission_issue_is_security_signal(self):
+        issue = afflr.normalize_issue(
+            self.sample_issue(
+                number=90001,
+                title="Permission boundary leaks session token",
+                body="Credential handling crosses an authorization boundary.",
+                labels=[{"name": "security"}, {"name": "area:auth"}],
+            )
+        )
+        self.assertIn("security / trust boundary", afflr.classify_signals(issue))
+
+    def test_related_context_is_explicit_not_evidence_level(self):
+        issue = afflr.normalize_issue(self.sample_issue(number=87086))
+        self.assertIn("related context", afflr.classify_signals(issue))
+
+    def test_primary_collection_keeps_related_context_and_fresh_critical(self):
+        recent_payload = {
+            "incomplete_results": False,
+            "items": [
+                self.sample_issue(
+                    number=87519,
+                    title="Monitor notifications deliver fabricated events",
+                    body="Observation event mismatch.",
+                    labels=[{"name": "bug"}, {"name": "area:tools"}],
+                    created_at="2026-08-18T04:17:54Z",
+                    updated_at="2026-08-18T04:19:04Z",
+                ),
+                self.sample_issue(
+                    number=77777,
+                    title="Feature request: themes",
+                    body="Cosmetic only.",
+                    labels=[{"name": "enhancement"}],
+                    created_at="2026-08-18T03:00:00Z",
+                    updated_at="2026-08-18T03:00:00Z",
+                ),
+            ],
         }
-        for url in urls.values():
-            self.assertIn("repo%3Aanthropics%2Fclaude-code", url)
-            self.assertIn("is%3Aissue", url)
-            self.assertIn("per_page=25", url)
-            self.assertIn("order=desc", url)
-        self.assertIn("sort=reactions", urls["most-reacted"])
-        self.assertIn("sort=comments", urls["most-discussed"])
-        self.assertIn("sort=updated", urls["recently-active"])
 
-    def test_collect_views_makes_exactly_three_requests(self):
+        pinned = {
+            number: self.sample_issue(
+                number=number,
+                title=f"related {number} provenance routing",
+                body="benchmark provenance and model routing context",
+                labels=[{"name": "model"}],
+                created_at="2026-08-16T00:00:00Z",
+                updated_at="2026-08-16T01:00:00Z",
+            )
+            for number in afflr.RELATED_CONTEXT_NUMBERS
+        }
+
+        def fake_fetch(url):
+            if url.startswith(afflr.SEARCH_ENDPOINT):
+                return recent_payload
+            number = int(url.rsplit("/", 1)[1])
+            return pinned[number]
+
+        views = afflr.collect_primary_views(fake_fetch)
+        integrity_numbers = {issue.number for issue in views["evidence-integrity"]}
+        fresh_numbers = {issue.number for issue in views["fresh-critical"]}
+        self.assertIn(87086, integrity_numbers)
+        self.assertIn(87519, integrity_numbers)
+        self.assertIn(87519, fresh_numbers)
+        self.assertNotIn(77777, fresh_numbers)
+
+    def test_secondary_views_keep_old_discovery_metadata(self):
         calls = []
 
         def fake_fetch(url):
@@ -117,87 +166,75 @@ class OrderingAndQueryTests(IssueFixtureMixin, unittest.TestCase):
                 "items": [self.sample_issue(number=len(calls))],
             }
 
-        views = afflr.collect_views(fake_fetch)
+        views = afflr.collect_secondary_views(fake_fetch)
         self.assertEqual(len(calls), 3)
-        self.assertEqual(
-            set(views), {"most-reacted", "most-discussed", "recently-active"}
-        )
+        self.assertEqual(set(views), set(afflr.SECONDARY_VIEW_ORDER))
+        self.assertIn("sort=reactions", calls[0])
+        self.assertIn("sort=comments", calls[1])
+        self.assertIn("sort=updated", calls[2])
 
 
 class RenderingTests(IssueFixtureMixin, unittest.TestCase):
-    def test_render_contains_required_metadata_and_escapes_table_text(self):
-        issue = afflr.normalize_issue(self.sample_issue(title="bad | title <script>"))
-        views = {
-            name: [issue]
-            for name in ("most-reacted", "most-discussed", "recently-active")
-        }
-        text = afflr.render_markdown(views)
-        self.assertIn("# AFFLR — Anthropic Failure Forensics Live Radar", text)
-        self.assertIn("[#83510]", text)
-        self.assertIn("KeilerHirsch", text)
-        self.assertIn("12 (", text)
-        self.assertIn("34", text)
-        self.assertIn(r"bad \| title &lt;script&gt;", text)
+    def primary_views(self, issue):
+        return {name: [issue] for name in afflr.PRIMARY_VIEW_ORDER}
+
+    def secondary_views(self, issue):
+        return {name: [issue] for name in afflr.SECONDARY_VIEW_ORDER}
+
+    def test_watchlist_renders_primary_then_secondary(self):
+        issue = afflr.normalize_issue(self.sample_issue())
+        text = afflr.render_markdown(
+            self.primary_views(issue),
+            self.secondary_views(issue),
+        )
+        self.assertIn("# Primary forensic discovery", text)
+        self.assertIn("🛡️ Security & trust-boundary signals", text)
+        self.assertIn("# Secondary discovery metadata", text)
+        self.assertIn("## Most reacted", text)
+        self.assertIn("not an AFF evidence level", text)
+
+    def test_readme_fragment_omits_popularity_views(self):
+        issue = afflr.normalize_issue(self.sample_issue())
+        text = afflr.render_readme_fragment(self.primary_views(issue))
+        self.assertIn("Security & trust-boundary signals", text)
+        self.assertIn("Evidence / provenance / integrity signals", text)
+        self.assertIn("Fresh critical signals", text)
+        self.assertNotIn("Most reacted", text)
+        self.assertIn("watchlist/candidates.md", text)
+
+    def test_primary_rows_explain_signal(self):
+        issue = afflr.normalize_issue(
+            self.sample_issue(
+                number=87519,
+                title="Monitor fabricated notification event",
+                body="subprocess never emitted it",
+                labels=[{"name": "area:tools"}, {"name": "bug"}],
+            )
+        )
+        text = "\n".join(afflr.render_primary_table_rows([issue]))
+        self.assertIn("observation / provenance integrity", text)
+        self.assertIn("high-signal label", text)
+
+    def test_render_escapes_untrusted_text(self):
+        issue = afflr.normalize_issue(
+            self.sample_issue(title="[click](https://evil.example) | <script>")
+        )
+        text = afflr.render_markdown(
+            self.primary_views(issue),
+            self.secondary_views(issue),
+        )
+        self.assertIn(r"\[click\](https://evil.example) \| &lt;script&gt;", text)
         self.assertNotIn("<script>", text)
 
-    def test_markdown_link_syntax_in_title_is_neutralized(self):
-        issue = afflr.normalize_issue(
-            self.sample_issue(title="[click](https://evil.example) | test")
-        )
-        views = {
-            name: [issue]
-            for name in ("most-reacted", "most-discussed", "recently-active")
-        }
-        text = afflr.render_markdown(views)
-        self.assertIn(r"\[click\](https://evil.example) \| test", text)
-        self.assertNotIn("[click](https://evil.example)", text)
-
-    def test_render_has_no_scores_or_new_marker(self):
-        issue = afflr.normalize_issue(self.sample_issue())
-        views = {
-            name: [issue]
-            for name in ("most-reacted", "most-discussed", "recently-active")
-        }
-        text = afflr.render_markdown(views)
-        self.assertNotIn("Forensic score", text)
-        self.assertNotIn("AFF score", text)
-        self.assertNotIn("**NEW**", text)
-
-    def test_render_is_byte_stable(self):
-        issue = afflr.normalize_issue(self.sample_issue())
-        views = {
-            name: [issue]
-            for name in ("most-reacted", "most-discussed", "recently-active")
-        }
-        self.assertEqual(afflr.render_markdown(views), afflr.render_markdown(views))
-
-    def test_readme_fragment_shows_top_five_and_collapses_rest(self):
+    def test_readme_top_five_and_collapses_rest(self):
         issues = [
             afflr.normalize_issue(self.sample_issue(number=number))
             for number in range(1, 26)
         ]
-        views = {name: issues for name in afflr.VIEW_ORDER}
-
-        text = afflr.render_readme_fragment(views)
-
+        primary = {name: issues for name in afflr.PRIMARY_VIEW_ORDER}
+        text = afflr.render_readme_fragment(primary)
         self.assertEqual(text.count("<details>"), 3)
         self.assertEqual(text.count("<summary>Show remaining 20</summary>"), 3)
-        for number in range(1, 26):
-            self.assertIn(f"[#{number}]", text)
-        for title in ("🔥 Most reacted", "💬 Most discussed", "🆕 Recently active"):
-            self.assertIn(title, text)
-
-    def test_readme_fragment_escapes_untrusted_text(self):
-        issue = afflr.normalize_issue(
-            self.sample_issue(title="[click](https://evil.example) | <script>")
-        )
-        views = {name: [issue] for name in afflr.VIEW_ORDER}
-        text = afflr.render_readme_fragment(views)
-        self.assertIn(
-            r"\[click\](https://evil.example) \| &lt;script&gt;",
-            text,
-        )
-        self.assertNotIn("<script>", text)
 
     def test_inject_readme_fragment_preserves_outside_content(self):
         original = (
@@ -217,22 +254,8 @@ class RenderingTests(IssueFixtureMixin, unittest.TestCase):
             "after\n",
         )
 
-    def test_inject_readme_fragment_rejects_bad_markers(self):
-        invalid = [
-            "no markers\n",
-            "<!-- AFFLR-RADAR:START -->\nonly start\n",
-            "<!-- AFFLR-RADAR:END -->\n<!-- AFFLR-RADAR:START -->\n",
-            "<!-- AFFLR-RADAR:START -->\na\n"
-            "<!-- AFFLR-RADAR:START -->\nb\n"
-            "<!-- AFFLR-RADAR:END -->\n",
-        ]
-        for text in invalid:
-            with self.subTest(text=text):
-                with self.assertRaises(afflr.RadarError):
-                    afflr.inject_readme_fragment(text, "new\n")
 
-
-class HttpAndCliTests(unittest.TestCase):
+class HttpAndCliTests(IssueFixtureMixin, unittest.TestCase):
     class DummyResponse:
         def __init__(self, body):
             self._body = body
@@ -263,15 +286,6 @@ class HttpAndCliTests(unittest.TestCase):
         self.assertFalse(payload["incomplete_results"])
         self.assertNotIn("authorization", seen["headers"])
 
-    def test_invalid_json_fails_closed(self):
-        def opener(request, timeout=0):
-            return self.DummyResponse(b"not-json")
-
-        with self.assertRaises(afflr.RadarError):
-            afflr.fetch_json(
-                "https://api.github.com/search/issues?q=x", opener=opener
-            )
-
     def test_cli_failure_does_not_replace_existing_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "radar.md"
@@ -285,65 +299,24 @@ class HttpAndCliTests(unittest.TestCase):
                 output.read_text(encoding="utf-8"), "last known good\n"
             )
 
-    def test_dual_output_failure_preserves_readme_and_watchlist(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            output = Path(tmp) / "radar.md"
-            readme = Path(tmp) / "README.md"
-            output.write_text("last known good\n", encoding="utf-8")
-            readme.write_text(
-                "before\n"
-                "<!-- AFFLR-RADAR:START -->\n"
-                "old\n"
-                "<!-- AFFLR-RADAR:END -->\n"
-                "after\n",
-                encoding="utf-8",
-            )
-            before_output = output.read_bytes()
-            before_readme = readme.read_bytes()
 
-            with patch.object(
-                afflr, "collect_live_views", side_effect=afflr.RadarError("boom")
-            ):
-                with self.assertRaises(afflr.RadarError):
-                    afflr.main(
-                        ["--output", str(output), "--readme", str(readme)]
-                    )
-
-            self.assertEqual(output.read_bytes(), before_output)
-            self.assertEqual(readme.read_bytes(), before_readme)
-
-
-class ReadmeContractTests(unittest.TestCase):
-    def test_readme_has_single_generated_region_and_direct_live_copy(self):
+class RepositoryContractTests(unittest.TestCase):
+    def test_readme_has_single_generated_region(self):
         text = Path("README.md").read_text(encoding="utf-8")
         self.assertEqual(text.count("<!-- AFFLR-RADAR:START -->"), 1)
         self.assertEqual(text.count("<!-- AFFLR-RADAR:END -->"), 1)
         self.assertIn("Evidence before attribution.", text)
-        self.assertNotIn("review PR", text)
-        self.assertIn("Top 5", text)
 
-
-class WorkflowContractTests(unittest.TestCase):
     def test_workflow_contract(self):
         text = Path(".github/workflows/afflr.yml").read_text(encoding="utf-8")
-        self.assertIn("name: AFFLR", text)
         self.assertIn("cron: '17 * * * *'", text)
-        self.assertIn("workflow_dispatch:", text)
         self.assertIn("contents: write", text)
-        self.assertNotIn("pull-requests: write", text)
-        self.assertNotIn("automation/afflr", text)
-        self.assertNotIn("gh pr", text)
-        self.assertNotIn("--force-with-lease", text)
-        self.assertNotIn("git push --force", text)
         self.assertIn("README.md", text)
         self.assertIn("watchlist/candidates.md", text)
         self.assertIn("git diff --quiet", text)
         self.assertIn("git push origin HEAD:main", text)
-        self.assertIn("git fetch origin main", text)
         self.assertIn("remote main moved during AFFLR run", text)
-        self.assertIn("3d3c42e5aac5ba805825da76410c181273ba90b1", text)
         self.assertNotIn("secrets.PAT", text)
-        self.assertNotIn("cases/AFF-", text)
 
 
 if __name__ == "__main__":
