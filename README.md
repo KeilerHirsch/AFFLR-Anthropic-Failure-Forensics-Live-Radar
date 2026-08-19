@@ -1,6 +1,6 @@
 # AFFLR — Anthropic Failure Forensics Live Radar
 
-AFFLR watches the public [`anthropics/claude-code`](https://github.com/anthropics/claude-code/issues) issue space and surfaces the strongest GitHub activity signals so interesting failures, regressions, and weird behavior are harder to miss.
+AFFLR watches the public [`anthropics/claude-code`](https://github.com/anthropics/claude-code/issues) issue space and prioritizes security/trust-boundary, evidence/provenance/integrity, and fresh critical signals for human review. Popularity and discussion remain secondary discovery metadata.
 
 > **Automation for productive laziness.** The radar does the repetitive watching; humans still decide what the evidence means.
 
